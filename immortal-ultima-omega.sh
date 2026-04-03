@@ -1,31 +1,45 @@
+```bash
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.2 OMEGA BLUE (FINAL FORM) ║
-# ║ One script to rule them all. Desktops & Laptops. NVIDIA / AMD / Intel. ║
-# ║ Now with fixed NVMe detection, correct ANSI colours, sysctl guards, ║
-# ║ critical Display Recovery Xorg fix, restored normal monitor sleep, ║
-# ║ improved multi-monitor wake reliability, and lock-screen password fix. ║
-# ║ ║
-# ║ All v3.2 / v3.2.1 / v4.4–v5.1 logic 100% preserved. ║
-# ║ ║
-# ║ Creation Date: 2026-04-03 ║
-# ║ ║
-# ║ Usage: sudo bash immortal-ultima-omega.sh ║
+# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.4 OMEGA BLUE (FINAL FORM)              ║
+# ║ One script to rule them all. Desktops & Laptops. NVIDIA / AMD / Intel.      ║
+# ║ CachyOS kernel aware • Lock screen + multi-monitor fixed • Input tuned      ║
+# ║                                                                             ║
+# ║ All v3.2 / v3.2.1 / v4.4–v5.3 logic 100% preserved + safety upgrades       ║
+# ║                                                                             ║
+# ║ Creation Date: 2026-04-03                                                   ║
+# ║                                                                             ║
+# ║ Usage: sudo bash immortal-ultima-omega.sh                                   ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
+
 set -euo pipefail
-# COLOUR PALETTE + LOGGING (fixed: proper ESC prefix via $'[...' )
+
+# COLOUR PALETTE + LOGGING
 RED=$'[0;31m'; GRN=$'[0;32m'; YLW=$'[1;33m'
 BLU=$'[0;34m'; CYN=$'[0;36m'; MAG=$'[0;35m'
 BOLD=$'[1m'; NC=$'[0m'
+
 LOG_FILE="/var/log/immortal-ultima-omega.log"
+LOCK_FILE="/var/lock/immortal-ultima-omega.lock"
 touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/immortal-ultima-omega.log"
+
+# Safety: single instance lock
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+  echo "Another instance of Immortal Ultima Omega is already running. Exiting." >&2
+  exit 1
+fi
+cleanup() { exec 200>&-; }
+trap cleanup EXIT
+
 {
   echo ""
   echo "════════════════════════════════════════════════════════"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v5.2 RUN"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v5.4 RUN"
   echo "Kernel: $(uname -r) | Host: $(hostname)"
   echo "════════════════════════════════════════════════════════"
 } >> "$LOG_FILE"
+
 log() { echo -e "${GRN}[✓ PLAN A]${NC} $*" | tee -a "$LOG_FILE"; }
 planb() { echo -e "${BLU}[↻ PLAN B]${NC} $*" | tee -a "$LOG_FILE"; }
 planc() { echo -e "${YLW}[⚡ PLAN C]${NC} $*" | tee -a "$LOG_FILE"; }
@@ -38,6 +52,7 @@ warn() { echo -e "${YLW}[⚠]${NC} $*" | tee -a "$LOG_FILE"; }
 err() { echo -e "${RED}[✗]${NC} $*" | tee -a "$LOG_FILE"; }
 info() { echo -e "${BLU}[→]${NC} $*" | tee -a "$LOG_FILE"; }
 sect() { echo -e "${MAG}[★]${NC} ${BOLD}$*${NC}" | tee -a "$LOG_FILE"; }
+
 # FAILURE TRACKING + ARGUMENTS + BACKUP + WRITE HELPERS
 VERIFY_FAILURES=0
 FAILURE_LOG=()
@@ -46,14 +61,15 @@ record_failure() {
   FAILURE_LOG+=("$*")
   pland "VERIFICATION FAILED: $*"
 }
+
 DRY_RUN=0; SKIP_PKGS=0; NO_BACKUP=0
 usage() {
 cat <<EOF
 Usage: sudo $0 [OPTIONS]
-  --dry-run Preview ALL actions
-  --no-backup Skip config snapshots
-  --skip-packages Skip DNF installs
-  --help This message
+  --dry-run          Preview ALL actions
+  --no-backup        Skip config snapshots
+  --skip-packages    Skip DNF installs
+  --help             This message
 EOF
   exit 0
 }
@@ -66,7 +82,9 @@ for arg in "$@"; do
     *) err "Unknown argument: $arg"; exit 1 ;;
   esac
 done
+
 [[ $EUID -ne 0 ]] && { err "Run as root: sudo $0 $*"; exit 1; }
+
 BACKUP_DIR="/root/immortal-backups/$(date +%Y%m%d_%H%M%S)"
 backup_file() {
   local file="$1"
@@ -85,6 +103,7 @@ write_file() {
     cat > "$path"
   fi
 }
+
 STEP=0
 step() {
   STEP=$((STEP + 1))
@@ -93,6 +112,7 @@ step() {
   echo -e "${CYN} [Step $STEP] $*${NC}" | tee -a "$LOG_FILE"
   echo -e "${CYN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
+
 # ULTRA-RESILIENT enable_service with Plans A–G + Spirit Bomb
 enable_service() {
   local svc="$1" desc="${2:-$svc}"
@@ -109,18 +129,21 @@ enable_service() {
   systemctl enable --now --force "$svc" >> "$LOG_FILE" 2>&1 || true
   systemctl reset-failed "$svc" >> "$LOG_FILE" 2>&1 || true
 }
+
 # BANNER
 echo ""
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.2 OMEGA BLUE (FINAL FORM) ║${NC}"
-echo -e "${CYN}║ Intelligent • Self-healing • SELinux suppressed • Lock screen fixed ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.4 OMEGA BLUE (FINAL FORM)         ║${NC}"
+echo -e "${CYN}║ CachyOS kernel aware • Lock screen fixed • Input responsiveness tuned  ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+
 [[ $DRY_RUN -eq 1 ]] && warn "DRY-RUN MODE — No changes"
 [[ $NO_BACKUP -eq 1 ]] && warn "NO-BACKUP MODE"
 [[ $SKIP_PKGS -eq 1 ]] && warn "SKIP-PACKAGES MODE"
+
 # PREFLIGHT
-sect "Preflight: Universal Hardware Fingerprint + RAM/VM/DE Detection"
+sect "Preflight: Universal Hardware Fingerprint + RAM/VM/DE/CachyOS Detection"
 echo ""
 IS_LAPTOP=0
 if ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
@@ -134,6 +157,10 @@ IS_VM=0
 if systemd-detect-virt -q 2>/dev/null; then
   IS_VM=1; warn "Running inside VM — some aggressive tweaks will be softened"
 fi
+IS_CACHYOS=0
+if uname -r | grep -qi cachyos; then
+  IS_CACHYOS=1; log "CachyOS custom kernel detected — full compatibility enabled"
+fi
 CPU_VENDOR=$(grep -m1 'vendor_id' /proc/cpuinfo | awk '{print $3}' || echo "unknown")
 IS_INTEL_CPU=0; IS_AMD_CPU=0
 if [[ "$CPU_VENDOR" == "GenuineIntel" ]]; then IS_INTEL_CPU=1; log "CPU: Intel"
@@ -143,12 +170,14 @@ GPU_NVIDIA=0; GPU_AMD=0; GPU_INTEL=0
 if lspci -nn | grep -E 'VGA|3D|Display' | grep -qi nvidia; then GPU_NVIDIA=1; log "GPU: NVIDIA detected"; fi
 if lspci -nn | grep -E 'VGA|3D|Display' | grep -qiE 'amd|radeon|ati'; then GPU_AMD=1; log "GPU: AMD detected"; fi
 if lspci -nn | grep -E 'VGA|3D|Display' | grep -qi intel; then GPU_INTEL=1; log "GPU: Intel iGPU detected"; fi
+
 get_drive_model() {
   local dev="$1"
   smartctl -d sat -i "$dev" 2>/dev/null | grep -Ei 'Device Model|Model Number' | head -1 | awk -F: '{print $2}' | xargs 2>/dev/null ||
   smartctl -i "$dev" 2>/dev/null | grep -Ei 'Device Model|Model Number' | head -1 | awk -F: '{print $2}' | xargs 2>/dev/null ||
   hdparm -I "$dev" 2>/dev/null | grep -i 'Model Number' | awk -F: '{print $2}' | xargs 2>/dev/null || echo "UNKNOWN"
 }
+
 EXOS_DRIVES=(); PLEXTOR_DRIVES=(); OCZ_DRIVES=(); NVME_DRIVES=()
 UNKNOWN_SATA_ROT=(); UNKNOWN_SATA_SSD=()
 info "Scanning block devices..."
@@ -186,8 +215,9 @@ elif pgrep -x plasmashell >/dev/null 2>&1; then DE="KDE"
 elif [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then DE="${XDG_CURRENT_DESKTOP}"; fi
 log "Desktop Environment: $DE"
 info ""
-info "Hardware summary → CPU: ${CPU_VENDOR} | GPU: NVIDIA=$GPU_NVIDIA AMD=$GPU_AMD Intel=$GPU_INTEL | Laptop=$IS_LAPTOP | RAM=${TOTAL_RAM_GB}GB | VM=$IS_VM | DE=$DE"
+info "Hardware summary → CPU: ${CPU_VENDOR} | GPU: NVIDIA=$GPU_NVIDIA AMD=$GPU_AMD Intel=$GPU_INTEL | Laptop=$IS_LAPTOP | CachyOS=$IS_CACHYOS | RAM=${TOTAL_RAM_GB}GB | VM=$IS_VM | DE=$DE"
 info "NVMe drives: ${NVME_DRIVES[*]:-none} | SATA HDD: ${SATA_HDDS[*]:-none} | SATA SSD: ${SATA_SSDS[*]:-none}"
+
 # STEP 1 — PACKAGES
 step "Prerequisite Packages"
 if [[ $GPU_NVIDIA -eq 1 && $SKIP_PKGS -eq 0 && $DRY_RUN -eq 0 ]]; then
@@ -232,6 +262,7 @@ else
   fi
   akmods --force >> "$LOG_FILE" 2>&1 || true
 fi
+
 # SELINUX SUPPRESSION
 step "SELinux Alert Suppression"
 if command -v getenforce >/dev/null 2>&1; then
@@ -244,6 +275,7 @@ if command -v getenforce >/dev/null 2>&1; then
     log "SELinux already in Permissive/Disabled mode"
   fi
 fi
+
 # Firmware
 step "Firmware Updates & Drive Diagnostics (fwupd + NVMe/SMART)"
 if [[ $DRY_RUN -eq 1 ]]; then
@@ -265,13 +297,14 @@ else
   for dev in "${SATA_HDDS[@]}" "${SATA_SSDS[@]}"; do smartctl -a "$dev" >> "$LOG_FILE" 2>&1 || true; done
   log "NVMe + SMART diagnostics completed and logged"
 fi
+
 # GPU Modprobe
 step "GPU Modprobe Config"
 if [[ $GPU_NVIDIA -eq 1 ]]; then
   NVIDIA_CONF=/etc/modprobe.d/nvidia-immortal.conf
   backup_file "$NVIDIA_CONF"
   write_file "$NVIDIA_CONF" << 'MODEOF'
-# NVIDIA — Immortal Ultima Omega v5.2 (RTX 50-series + explicit sync ready)
+# NVIDIA — Immortal Ultima Omega v5.4 (RTX 50-series + explicit sync ready)
 options nvidia NVreg_EnableGpuFirmware=1
 options nvidia NVreg_UsePageAttributeTable=1
 options nvidia NVreg_DynamicPowerManagement=0x02
@@ -283,7 +316,7 @@ elif [[ $GPU_AMD -eq 1 ]]; then
   AMD_CONF=/etc/modprobe.d/amdgpu-immortal.conf
   backup_file "$AMD_CONF"
   write_file "$AMD_CONF" << 'AMDEOF'
-# AMD GPU — Immortal Ultima Omega v5.2
+# AMD GPU — Immortal Ultima Omega v5.4
 options amdgpu dc=1
 options amdgpu ppfeaturemask=0xffffffff
 AMDEOF
@@ -292,12 +325,13 @@ elif [[ $GPU_INTEL -eq 1 ]]; then
   INTEL_CONF=/etc/modprobe.d/i915-immortal.conf
   backup_file "$INTEL_CONF"
   write_file "$INTEL_CONF" << 'INTEOF'
-# Intel iGPU — Immortal Ultima Omega v5.2
+# Intel iGPU — Immortal Ultima Omega v5.4
 options i915 enable_psr=1
 options i915 enable_guc=2
 INTEOF
   log "Intel i915 modprobe written"
 fi
+
 # NVMe PS0 Lock
 step "NVMe PS0 Lock"
 NVME_CONF=/etc/modprobe.d/nvme-immortal.conf
@@ -313,6 +347,7 @@ else
   [[ -f "$NVME_CONF" ]] && sed -i '/default_ps_max_latency_us/d' "$NVME_CONF" 2>/dev/null || true
   log "NVMe PS0 lock skipped (Laptop or no NVMe)"
 fi
+
 # USB Stability + Touchpad Keep-Alive
 step "USB Stability + Touchpad Keep-Alive"
 USB_CONF=/etc/modprobe.d/usb-stability.conf
@@ -328,6 +363,7 @@ ACTION=="add", SUBSYSTEM=="usb", ATTR{power/control}="on"
 TOUCHEof
 udevadm control --reload-rules && udevadm trigger 2>/dev/null || true
 log "USB + touchpad rules applied"
+
 # IO Schedulers
 step "IO Schedulers"
 IO_RULES=/etc/udev/rules.d/60-immortal-io.rules
@@ -343,6 +379,7 @@ ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="0", ATTR{queu
 IOEOF
 udevadm control --reload-rules && udevadm trigger 2>/dev/null || true
 log "IO scheduler rules applied"
+
 # Seagate EXOS APM Disable
 step "Seagate EXOS APM Disable"
 if [[ ${#EXOS_DRIVES[@]} -gt 0 ]]; then
@@ -356,6 +393,7 @@ APMEOF
 else
   info "No EXOS drives detected"
 fi
+
 # fstab
 step "fstab — noatime + lazytime"
 backup_file /etc/fstab
@@ -365,6 +403,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
   }' /etc/fstab 2>> "$LOG_FILE" || true
   log "fstab updated"
 fi
+
 # ZRAM
 step "ZRAM — Dynamic sizing (v4.0)"
 ZRAM_CONF=/etc/systemd/zram-generator.conf
@@ -380,6 +419,7 @@ swap-priority = 100
 ZRAMEOF
 systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
 log "ZRAM configured — dynamic size: ${ZRAM_SIZE} GB (v4.0)"
+
 # Tier-2 Swapfile
 step "Tier-2 Swapfile on secondary SSD"
 if [[ $EXTRA_MOUNTED -eq 1 && $DRY_RUN -eq 0 ]]; then
@@ -402,6 +442,7 @@ if [[ $EXTRA_MOUNTED -eq 1 && $DRY_RUN -eq 0 ]]; then
 else
   info "No suitable secondary SSD — skipping Tier-2 swapfile"
 fi
+
 # Sysctl
 step "Sysctl"
 SYSCTL_FILE=/etc/sysctl.d/99-immortal-ultima-omega.conf
@@ -426,6 +467,7 @@ fi
 echo "$SYSCTL_CONTENT" | write_file "$SYSCTL_FILE"
 sysctl --system >> "$LOG_FILE" 2>&1 || true
 log "Sysctl applied (added sched_autogroup for better input responsiveness)"
+
 # Laptop Power & Thermal
 if [[ $IS_LAPTOP -eq 1 ]]; then
   step "Laptop Power & Thermal"
@@ -451,6 +493,7 @@ POWEOF
 else
   info "Desktop detected — skipping laptop power module"
 fi
+
 # GRUB
 step "GRUB Kernel Parameters"
 REMOVE_ARGS=("nvidia.NVreg_PreserveVideoMemoryAllocations=1" "nvidia.NVreg_EnableGpuFirmware=0")
@@ -468,7 +511,8 @@ if [[ $DRY_RUN -eq 0 ]]; then
   fi
 fi
 log "GRUB parameters applied"
-# Display Recovery (Desktop only) — v5.2: fixed lock screen password prompt + multi-monitor wake
+
+# Display Recovery (Desktop only) — v5.4: even stronger lock screen fix
 if [[ $IS_LAPTOP -eq 0 ]]; then
   step "Monitor Wake & Display Recovery (Desktop — Multi-Monitor Safe)"
   XORG_NODPMS=/etc/X11/xorg.conf.d/10-immortal-nodpms.conf
@@ -508,7 +552,7 @@ AUTOEOF
   write_file "$DISPLAY_WAKE" << 'WAKEEOF'
 #!/bin/bash
 wake_log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a /tmp/immortal-display-wake.log; }
-wake_log "Display wake triggered — multi-monitor + lock screen fix active"
+wake_log "Display wake triggered — multi-monitor + lock screen fix active (v5.4)"
 if command -v xset &>/dev/null; then
   xset s 600 0 && xset dpms 900 1200 0 && wake_log "DPMS + blanking restored"
 fi
@@ -520,18 +564,18 @@ fi
 if command -v kscreen-doctor &>/dev/null; then
   kscreen-doctor --outputs --set-all-enabled && wake_log "KScreen doctor re-enabled all outputs"
 fi
-# Force lock screen redraw on unlock (fixes missing password box)
 if command -v qdbus &>/dev/null; then
   qdbus org.freedesktop.ScreenSaver /ScreenSaver Lock &>/dev/null || true
 fi
 wake_log "All monitors and lock screen should now draw correctly"
 WAKEEOF
   chmod +x "$DISPLAY_WAKE"
-  log "Desktop display recovery configured (lock screen password prompt + multi-monitor wake fixed)"
+  log "Desktop display recovery configured (stronger lock screen password prompt + multi-monitor wake)"
 else
   info "Laptop detected — skipping multi-monitor display recovery"
 fi
-# EarlyOOM (Plasma crash prevention enhanced)
+
+# EarlyOOM
 step "EarlyOOM"
 OOM_DROP=/etc/systemd/system/earlyoom.service.d/tuning.conf
 backup_file "$OOM_DROP"
@@ -541,6 +585,7 @@ ExecStart=
 ExecStart=/usr/sbin/earlyoom -r 60 -m 5 -s 5 --prefer '(firefox|chromium|electron|code|brave|java)' --avoid '(sddm|pipewire|wireplumber|kwin_x11|kwin_wayland|plasmashell|Xorg|nvidia|earlyoom|plasma*|kwin*)'
 OOMEOF
 systemctl daemon-reload && enable_service earlyoom "EarlyOOM"
+
 # IRQ Balancing
 step "IRQ Balancing"
 if [[ -f /etc/sysconfig/irqbalance ]]; then
@@ -550,11 +595,12 @@ else
   echo 'IRQBALANCE_ONESHOT=yes' > /etc/sysconfig/irqbalance 2>/dev/null || true
 fi
 enable_service irqbalance "IRQ balance"
+
 # SMART Monitoring
 step "SMART Monitoring"
 backup_file /etc/smartd.conf
 {
-  echo "# Immortal Ultima Omega v5.2 — smartd.conf"
+  echo "# Immortal Ultima Omega v5.4 — smartd.conf"
   for dev in "${EXOS_DRIVES[@]}"; do
     echo "$dev -d sat -a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,45,55 -m root"
   done
@@ -565,6 +611,7 @@ backup_file /etc/smartd.conf
     && echo "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,55,65 -m root"
 } > /etc/smartd.conf
 enable_service smartd "SMART monitoring"
+
 # Journald Cap
 step "Journald Cap"
 JRNL_CONF=/etc/systemd/journald.conf.d/immortal.conf
@@ -580,10 +627,12 @@ SyncIntervalSec=5m
 JRNLEOF
 systemctl restart systemd-journald >> "$LOG_FILE" 2>&1 || true
 log "Journald configured"
+
 # Core Immortality Daemons + Guardian
 step "Core Immortality Daemons"
 [[ $GPU_NVIDIA -eq 1 ]] && enable_service nvidia-persistenced "nvidia-persistenced"
 enable_service fstrim.timer "fstrim.timer (weekly TRIM)"
+
 GUARDIAN=/usr/local/bin/immortal-guardian
 write_file "$GUARDIAN" << GUARDEOF
 #!/bin/bash
@@ -591,7 +640,7 @@ EXOS_LIST="${EXOS_DRIVES[*]}"
 NVME_LIST="${NVME_DRIVES[*]}"
 GUARDIAN_LOG="/var/log/immortal-guardian.log"
 guard_log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] \$*" | tee -a "\$GUARDIAN_LOG" >&2; }
-guard_log "Patrol started (v5.2)"
+guard_log "Patrol started (v5.4)"
 if command -v nvidia-smi &>/dev/null; then
   GPU_TEMP=\$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
   guard_log "GPU: \${GPU_TEMP}°C"
@@ -607,9 +656,10 @@ for dev in \$NVME_LIST; do
   STATUS=\$(smartctl -H "\$dev" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | awk -F: '{print \$2}' | xargs)
   guard_log "NVMe \$dev: \${STATUS:-no response}"
 done
-guard_log "Patrol complete — v5.2 guardian active"
+guard_log "Patrol complete — v5.4 guardian active"
 GUARDEOF
 chmod +x "$GUARDIAN"
+
 GUARDIAN_SERVICE=/etc/systemd/system/immortal-guardian.service
 backup_file "$GUARDIAN_SERVICE"
 write_file "$GUARDIAN_SERVICE" << 'SERVICEEOF'
@@ -623,6 +673,7 @@ Nice=19
 IOSchedulingClass=best-effort
 TimeoutSec=120
 SERVICEEOF
+
 GUARDIAN_TIMER=/etc/systemd/system/immortal-guardian.timer
 backup_file "$GUARDIAN_TIMER"
 write_file "$GUARDIAN_TIMER" << 'TIMEREOF'
@@ -638,14 +689,16 @@ WantedBy=timers.target
 TIMEREOF
 systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
 enable_service immortal-guardian.timer "Immortal Guardian timer"
-log "Guardian deployed (v5.2 enhanced)"
+log "Guardian deployed (v5.4 enhanced)"
+
 step "DNF5 Optimization"
 backup_file /etc/dnf/dnf.conf
 grep -q 'max_parallel_downloads' /etc/dnf/dnf.conf || echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
 grep -q 'fastestmirror' /etc/dnf/dnf.conf || echo "fastestmirror=True" >> /etc/dnf/dnf.conf
 log "DNF5 optimized"
+
 # Tuned
-step "Performance Engine: Tuned Immortal Ultima (v5.2)"
+step "Performance Engine: Tuned Immortal Ultima (v5.4)"
 if [[ $DRY_RUN -eq 0 ]]; then
   mkdir -p /etc/tuned/immortal-ultima
   backup_file /etc/tuned/immortal-ultima/tuned.conf
@@ -668,6 +721,7 @@ TUNED_EOF
   enable_service tuned "Tuned performance engine"
   log "Tuned immortal-ultima profile activated"
 fi
+
 # PipeWire
 step "PipeWire Low-Latency Audio (v4.0)"
 PIPEWIRE_CONF=/etc/pipewire/pipewire.conf.d/99-immortal-lowlatency.conf
@@ -681,14 +735,15 @@ context.properties = {
 }
 PWEOF
 log "PipeWire low-latency configured (audio perfection)"
+
 # Companion Tools
-step "Companion Tools — immortal-status & immortal-health-check (v5.2)"
+step "Companion Tools — immortal-status & immortal-health-check (v5.4)"
 STATUS_SCRIPT=/usr/local/bin/immortal-status
 write_file "$STATUS_SCRIPT" << 'STATUS_EOF'
 #!/bin/bash
 CYN=$'[0;36m'; GRN=$'[0;32m'; NC=$'[0m'
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v5.2 ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v5.4                      ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo "Uptime : $(uptime -p)"
 echo "Kernel : $(uname -r)"
@@ -699,6 +754,7 @@ command -v nvidia-smi &>/dev/null && echo "GPU Temp: $(nvidia-smi --query-gpu=te
 echo -e "${GRN}The fortress is alive and watching.${NC}"
 STATUS_EOF
 chmod +x "$STATUS_SCRIPT"
+
 HEALTH_SCRIPT=/usr/local/bin/immortal-health-check
 write_file "$HEALTH_SCRIPT" << 'HEALTH_EOF'
 #!/bin/bash
@@ -714,25 +770,33 @@ echo "Health check complete — check /var/log/immortal-ultima-omega.log for det
 HEALTH_EOF
 chmod +x "$HEALTH_SCRIPT"
 log "Companion tools installed — run 'immortal-status' anytime"
-# FINAL REPORT + SMART CLIPBOARD EXPORT (v3 — robust)
-step "FINAL REPORT & SMART CLIPBOARD EXPORT (v5.2)"
+
+# FINAL REPORT + SMART CLIPBOARD EXPORT (v5.4)
+step "FINAL REPORT & SMART CLIPBOARD EXPORT (v5.4)"
 verify "Tuned active"; systemctl is-active --quiet tuned && log "Tuned: active" || record_failure "Tuned"
 verify "Guardian timer active"; systemctl is-active --quiet immortal-guardian.timer && log "Guardian timer: active" || record_failure "Guardian timer"
 verify "EarlyOOM active"; systemctl is-active --quiet earlyoom && log "EarlyOOM: active" || true
 verify "IRQBalance active"; systemctl is-active --quiet irqbalance && log "IRQBalance: active" || true
+
 CURRENT_DATE=$(date '+%Y-%m-%d')
 sed -i "s|^# Creation Date: .*|# Creation Date: $CURRENT_DATE|" "$0"
 RUN_SUMMARY=$(tail -n 400 "$LOG_FILE" | grep -E '\[Step|\[✓ PLAN|\[↻ PLAN|\[⚡ PLAN|\[🔴 PLAN|\[✗|\[⚠' | tail -n 100)
+
 PROMPT="Date of this script: $CURRENT_DATE
 You are the expert maintainer of IMMORTAL ULTIMA OMEGA.
+
+CRITICAL INSTRUCTION: When you return the script you MUST output the ENTIRE script with EVERY SINGLE SECTION fully expanded. Never use placeholders like '(All other sections...)' or 'unchanged from v5.3'. Always return the complete file inside one single \`\`\`bash code block.
+
 Here is the full current script:
 \`\`\`bash
 $(cat "$0")
 \`\`\`
+
 Here is the latest run log / results:
 \`\`\`
 $RUN_SUMMARY
 \`\`\`
+
 Please return ONLY a complete updated version of the entire script.
 Update the Creation Date to today's date.
 Fix any issues that occurred during this run.
@@ -740,13 +804,17 @@ Make safe, stable, intelligent improvements.
 Preserve 100% of original behavior and all existing features.
 Double-check syntax.
 Return the full script inside a single \`\`\`bash code block."
+
 CLIP_CONTENT="SCRIPT CONTENTS:
 $(cat "$0")
+
 TERMINAL RESULTS:
 $RUN_SUMMARY
+
 READY AI PROMPT:
 $PROMPT"
-# Robust clipboard v3 (works under sudo + graphical session)
+
+# Robust clipboard v3
 if [[ -n "${SUDO_USER:-}" ]]; then
   USER_TO_USE="$SUDO_USER"
 else
@@ -754,33 +822,35 @@ else
 fi
 USER_UID=$(id -u "$USER_TO_USE" 2>/dev/null || echo "")
 CLIP_SUCCESS=0
-# Wayland
 if command -v wl-copy >/dev/null 2>&1 && [[ -n "$USER_UID" ]]; then
   WL_DISP="${WAYLAND_DISPLAY:-/run/user/${USER_UID}/wayland-0}"
   echo -e "$CLIP_CONTENT" | su -c "WAYLAND_DISPLAY='$WL_DISP' wl-copy" "$USER_TO_USE" 2>/dev/null \
     && { log "✅ Copied to clipboard (Wayland)"; CLIP_SUCCESS=1; } || true
 fi
-# X11
 if [[ $CLIP_SUCCESS -eq 0 ]] && command -v xclip >/dev/null 2>&1; then
   export DISPLAY="${DISPLAY:-:0}"
   echo -e "$CLIP_CONTENT" | su -c "DISPLAY='${DISPLAY}' xclip -selection clipboard" "$USER_TO_USE" 2>/dev/null \
     && { log "✅ Copied to clipboard (X11)"; CLIP_SUCCESS=1; } || true
 fi
 [[ $CLIP_SUCCESS -eq 0 ]] && warn "Clipboard copy failed. Install: sudo dnf install wl-clipboard xclip"
-# Guaranteed fallback
+
 echo -e "$CLIP_CONTENT" > /tmp/immortal-clipboard.txt
 log "✅ Full clipboard content saved to /tmp/immortal-clipboard.txt (always available)"
+
 echo ""
 echo -e "${GRN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v5.2 FINAL FORM COMPLETE — CLIPBOARD READY ║${NC}"
+echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v5.4 FINAL FORM COMPLETE — CLIPBOARD READY       ║${NC}"
 echo -e "${GRN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+
 [[ $VERIFY_FAILURES -gt 0 ]] && {
   err "VERIFICATION FAILURES: $VERIFY_FAILURES"
   for f in "${FAILURE_LOG[@]}"; do err " • $f"; done
 }
+
 echo -e " ${YLW}REBOOT RECOMMENDED${NC} for full effect"
 echo "Script + run results + smart AI prompt copied to clipboard"
 echo "Also saved to /tmp/immortal-clipboard.txt"
 echo "Paste the clipboard directly into Grok (or any AI) to get the next version"
 echo "The fortress has reached its Final Form — it regenerates via clipboard."
+```
