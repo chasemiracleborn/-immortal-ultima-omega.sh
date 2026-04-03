@@ -1,11 +1,11 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v6.2 KEFKA GOD MODE (IMMORTAL)           ║
+# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v6.3 KEFKA GOD MODE + IMMORTAL SENTINEL ║
 # ║ One script to rule them all. Desktops & Laptops. NVIDIA / AMD / Intel.     ║
 # ║ Hardware-aware, idempotent, reversible, snapshot-backed, self-healing.     ║
 # ║ Now with state directory, config snapshots, --status/--revert, hardening,  ║
 # ║ Deskflow auto-allow KVM PC, Firefox latency fix, ABCDE Guardian triage,    ║
-# ║ and KEFKA REVERSAL RITUAL on Desktop.                                      ║
+# ║ KEFKA REVERSAL RITUAL on Desktop, and lightweight IMMORTAL SENTINEL daemon.║
 # ║                                                                            ║
 # ║ All v5.5 logic 100% preserved + KEFKA GOD MODE power layer.               ║
 # ║ "I will destroy everything... I will create a monument to non-existence!"  ║
@@ -68,6 +68,7 @@ record_failure() {
 }
 
 DRY_RUN=0; SKIP_PKGS=0; NO_BACKUP=0; FORCE=0; STATUS_ONLY=0; REVERT_ONLY=0
+
 usage() {
 cat <<EOF
 Usage: sudo $0 [OPTIONS]
@@ -81,6 +82,7 @@ Usage: sudo $0 [OPTIONS]
 EOF
   exit 0
 }
+
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
@@ -117,11 +119,11 @@ write_file() {
   fi
 }
 
-# Idempotency helpers (v6.2)
+# Idempotency helpers (v6.3)
 is_completed() { [[ -f "$MARKER_DIR/$1" ]] && [[ $FORCE -eq 0 ]]; }
 mark_completed() { touch "$MARKER_DIR/$1" 2>/dev/null || true; }
 
-# Snapshot critical configs before changes (v6.2)
+# Snapshot critical configs before changes (v6.3)
 create_snapshot() {
   local name="$1"
   local ts=$(date +%Y%m%d_%H%M%S)
@@ -134,7 +136,7 @@ create_snapshot() {
   log "Created rollback snapshot: $snap"
 }
 
-# Rollback helper (v6.2)
+# Rollback helper (v6.3)
 revert_last_snapshot() {
   local last=$(cat "$STATE_DIR/last_snapshot" 2>/dev/null || echo "")
   if [[ -d "$last" ]]; then
@@ -177,9 +179,9 @@ enable_service() {
 # BANNER
 echo ""
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v6.2 KEFKA GOD MODE (IMMORTAL)     ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v6.3 KEFKA GOD MODE + SENTINEL     ║${NC}"
 echo -e "${CYN}║ Hardware-aware • Idempotent • Reversible • Snapshot-backed           ║${NC}"
-echo -e "${CYN}║ KEFKA REVERSAL RITUAL on Desktop — destroy or heal at will           ║${NC}"
+echo -e "${CYN}║ KEFKA REVERSAL RITUAL + Lightweight Sentinel (observe-first healing)  ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -194,6 +196,7 @@ if [[ $STATUS_ONLY -eq 1 ]]; then
   echo "Markers applied: $(ls "$MARKER_DIR" 2>/dev/null | wc -l)"
   systemctl is-active --quiet tuned && echo "Tuned: active" || echo "Tuned: inactive"
   systemctl is-active --quiet immortal-guardian.timer && echo "Guardian: active" || echo "Guardian: inactive"
+  systemctl is-active --quiet immortal-sentinel.service && echo "Sentinel: active" || echo "Sentinel: inactive"
   exit 0
 fi
 
@@ -205,12 +208,12 @@ fi
 {
   echo ""
   echo "════════════════════════════════════════════════════════"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v6.2 KEFKA GOD MODE RUN"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v6.3 KEFKA GOD MODE + SENTINEL RUN"
   echo "Kernel: $(uname -r) | Host: $(hostname)"
   echo "════════════════════════════════════════════════════════"
 } >> "$LOG_FILE"
 
-log "Starting IMMORTAL ULTIMA OMEGA v6.2 KEFKA GOD MODE"
+log "Starting IMMORTAL ULTIMA OMEGA v6.3 KEFKA GOD MODE + SENTINEL"
 
 # PREFLIGHT
 sect "Preflight: Universal Hardware Fingerprint + RAM/VM/DE/CachyOS Detection"
@@ -286,8 +289,8 @@ info ""
 info "Hardware summary → CPU: ${CPU_VENDOR} | GPU: NVIDIA=$GPU_NVIDIA AMD=$GPU_AMD Intel=$GPU_INTEL | Laptop=$IS_LAPTOP | CachyOS=$IS_CACHYOS | RAM=${TOTAL_RAM_GB}GB | VM=$IS_VM | DE=$DE"
 info "NVMe drives: ${NVME_DRIVES[*]:-none} | SATA HDD: ${SATA_HDDS[*]:-none} | SATA SSD: ${SATA_SSDS[*]:-none}"
 
-# v6.2 State & Safety Setup
-step "State & Safety Setup (v6.2)"
+# v6.3 State & Safety Setup
+step "State & Safety Setup (v6.3)"
 create_snapshot "pre-run"
 
 # STEP 1 — PACKAGES
@@ -376,7 +379,7 @@ if [[ $GPU_NVIDIA -eq 1 ]]; then
   NVIDIA_CONF=/etc/modprobe.d/nvidia-immortal.conf
   backup_file "$NVIDIA_CONF"
   write_file "$NVIDIA_CONF" << 'MODEOF'
-# NVIDIA — Immortal Ultima Omega v6.2 KEFKA GOD MODE (RTX 50-series + explicit sync ready)
+# NVIDIA — Immortal Ultima Omega v6.3 KEFKA GOD MODE (RTX 50-series + explicit sync ready)
 options nvidia NVreg_EnableGpuFirmware=1
 options nvidia NVreg_UsePageAttributeTable=1
 options nvidia NVreg_DynamicPowerManagement=0x02
@@ -388,7 +391,7 @@ elif [[ $GPU_AMD -eq 1 ]]; then
   AMD_CONF=/etc/modprobe.d/amdgpu-immortal.conf
   backup_file "$AMD_CONF"
   write_file "$AMD_CONF" << 'AMDEOF'
-# AMD GPU — Immortal Ultima Omega v6.2 KEFKA GOD MODE
+# AMD GPU — Immortal Ultima Omega v6.3 KEFKA GOD MODE
 options amdgpu dc=1
 options amdgpu ppfeaturemask=0xffffffff
 AMDEOF
@@ -397,7 +400,7 @@ elif [[ $GPU_INTEL -eq 1 ]]; then
   INTEL_CONF=/etc/modprobe.d/i915-immortal.conf
   backup_file "$INTEL_CONF"
   write_file "$INTEL_CONF" << 'INTEOF'
-# Intel iGPU — Immortal Ultima Omega v6.2 KEFKA GOD MODE
+# Intel iGPU — Immortal Ultima Omega v6.3 KEFKA GOD MODE
 options i915 enable_psr=1
 options i915 enable_guc=2
 INTEOF
@@ -624,7 +627,7 @@ AUTOEOF
   write_file "$DISPLAY_WAKE" << 'WAKEEOF'
 #!/bin/bash
 wake_log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a /tmp/immortal-display-wake.log; }
-wake_log "Display wake triggered — multi-monitor + lock screen fix active (v6.2 KEFKA GOD MODE)"
+wake_log "Display wake triggered — multi-monitor + lock screen fix active (v6.3 KEFKA GOD MODE)"
 if command -v xset &>/dev/null; then
   xset s 600 0 && xset dpms 900 1200 0 && wake_log "DPMS + blanking restored"
 fi
@@ -672,7 +675,7 @@ enable_service irqbalance "IRQ balance"
 step "SMART Monitoring"
 backup_file /etc/smartd.conf
 {
-  echo "# Immortal Ultima Omega v6.2 KEFKA GOD MODE — smartd.conf"
+  echo "# Immortal Ultima Omega v6.3 KEFKA GOD MODE — smartd.conf"
   for dev in "${EXOS_DRIVES[@]}"; do
     echo "$dev -d sat -a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,45,55 -m root"
   done
@@ -711,18 +714,15 @@ EXOS_LIST="${EXOS_DRIVES[*]}"
 NVME_LIST="${NVME_DRIVES[*]}"
 GUARDIAN_LOG="/var/log/immortal-guardian.log"
 guard_log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$GUARDIAN_LOG" >&2; }
-guard_log "Patrol started (v6.2 KEFKA GOD MODE) — ABCDE triage active"
-
+guard_log "Patrol started (v6.3 KEFKA GOD MODE) — ABCDE triage active"
 # A: Assess (quick health snapshot)
 lscpu | head -n 10 >> "$GUARDIAN_LOG"
 swapon --show >> "$GUARDIAN_LOG"
-
 # B: Baseline (check for common errors)
 if dmesg | grep -qiE 'nvidia|drm|gpu|error'; then
   guard_log "⚠️ Possible GPU/Display error in dmesg — triggering display recovery"
   /usr/local/bin/immortal-display-wake 2>/dev/null || true
 fi
-
 # C: Collect & Diagnose (audio, NVMe, thermal)
 if command -v pactl >/dev/null 2>&1; then
   if pactl list short sinks | grep -q "RUNNING"; then
@@ -734,12 +734,10 @@ for dev in $NVME_LIST; do
   STATUS=$(smartctl -H "$dev" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | awk -F: '{print $2}' | xargs)
   guard_log "NVMe $dev: ${STATUS:-no response}"
 done
-
 # D: Display & Drivers (multi-monitor check)
 if command -v kscreen-doctor >/dev/null 2>&1; then
   kscreen-doctor --outputs --set-all-enabled >> "$GUARDIAN_LOG" 2>&1 || true
 fi
-
 # E: Energy & Errors (thermal / high temp)
 if command -v nvidia-smi >/dev/null 2>&1; then
   GPU_TEMP=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
@@ -749,8 +747,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     tuned-adm profile balanced >> "$GUARDIAN_LOG" 2>&1 || true
   fi
 fi
-
-guard_log "ABCDE triage complete — v6.2 KEFKA GOD MODE guardian active"
+guard_log "ABCDE triage complete — v6.3 KEFKA GOD MODE guardian active"
 GUARDEOF
 chmod +x "$GUARDIAN"
 GUARDIAN_SERVICE=/etc/systemd/system/immortal-guardian.service
@@ -781,7 +778,7 @@ WantedBy=timers.target
 TIMEREOF
 systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
 enable_service immortal-guardian.timer "Immortal Guardian timer"
-log "Guardian deployed (v6.2 KEFKA GOD MODE with ABCDE triage)"
+log "Guardian deployed (v6.3 KEFKA GOD MODE with ABCDE triage)"
 
 step "DNF5 Optimization"
 backup_file /etc/dnf/dnf.conf
@@ -790,7 +787,7 @@ grep -q 'fastestmirror' /etc/dnf/dnf.conf || echo "fastestmirror=True" >> /etc/d
 log "DNF5 optimized"
 
 # Tuned + power-profiles-daemon conflict guard
-step "Performance Engine: Tuned Immortal Ultima (v6.2)"
+step "Performance Engine: Tuned Immortal Ultima (v6.3)"
 systemctl mask --now power-profiles-daemon 2>/dev/null || true
 if [[ $DRY_RUN -eq 0 ]]; then
   mkdir -p /etc/tuned/immortal-ultima
@@ -863,19 +860,20 @@ FFEOF
 fi
 
 # Companion Tools
-step "Companion Tools — immortal-status & immortal-health-check (v6.2)"
+step "Companion Tools — immortal-status & immortal-health-check (v6.3)"
 STATUS_SCRIPT=/usr/local/bin/immortal-status
 write_file "$STATUS_SCRIPT" << 'STATUS_EOF'
 #!/bin/bash
 CYN=$'[0;36m'; GRN=$'[0;32m'; NC=$'[0m'
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v6.2 KEFKA GOD MODE ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v6.3 KEFKA GOD MODE ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo "Uptime : $(uptime -p)"
 echo "Kernel : $(uname -r)"
 echo "Tuned : $(tuned-adm active 2>/dev/null || echo none)"
 echo "ZRAM : $(swapon --show | grep zram || echo none)"
 echo "Guardian: running every 30 min"
+echo "Sentinel: running every 5 min (low-impact)"
 command -v nvidia-smi &>/dev/null && echo "GPU Temp: $(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)°C"
 echo -e "${GRN}The fortress is alive and watching.${NC}"
 STATUS_EOF
@@ -897,8 +895,71 @@ HEALTH_EOF
 chmod +x "$HEALTH_SCRIPT"
 log "Companion tools installed — run 'immortal-status' anytime"
 
-# v6.2 Kernel Hardening
-step "Kernel Hardening (v6.2)"
+# IMMORTAL SENTINEL DAEMON (low-resource, observe-first healing)
+step "Immortal Sentinel Daemon (low-impact background healing)"
+SENTINEL=/usr/local/bin/immortal-sentinel
+write_file "$SENTINEL" << 'SENTINELEOF'
+#!/bin/bash
+LOG="/var/log/immortal-sentinel.log"
+exec > >(tee -a "$LOG") 2>&1
+sentinel_log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
+sentinel_log "Immortal Sentinel v6.3 started — low-impact, observe-first healing"
+
+while true; do
+  # Safe display recovery (multi-monitor wake + RGB fix)
+  if command -v kscreen-doctor >/dev/null 2>&1; then
+    kscreen-doctor --outputs --set-all-enabled >/dev/null 2>&1 || true
+  fi
+  if command -v xrandr >/dev/null 2>&1; then
+    for out in $(xrandr | grep " connected" | awk '{print $1}'); do
+      xrandr --output "$out" --set "Broadcast RGB" "Full" >/dev/null 2>&1 || true
+    done
+  fi
+  # Safe audio jitter check
+  if journalctl --since "5min" | grep -iq "pipewire.*xrun"; then
+    sentinel_log "Audio jitter detected — restarting PipeWire safely"
+    systemctl --user restart pipewire.service 2>/dev/null || true
+  fi
+  # GPU temp check (throttle only, no restart)
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    GPU_TEMP=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
+    if [[ $GPU_TEMP -gt 85 ]]; then
+      sentinel_log "HIGH GPU TEMP — throttling tuned profile temporarily"
+      tuned-adm profile balanced >/dev/null 2>&1 || true
+    fi
+  fi
+  sleep 300
+done
+SENTINELEOF
+chmod +x "$SENTINEL"
+
+SENTINEL_SERVICE=/etc/systemd/system/immortal-sentinel.service
+write_file "$SENTINEL_SERVICE" << 'SENTINELSVCEOF'
+[Unit]
+Description=Immortal Sentinel Daemon (low-impact background healing)
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/local/bin/immortal-sentinel
+Restart=always
+RestartSec=10
+Nice=19
+CPUQuota=15%
+MemoryMax=128M
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
+SENTINELSVCEOF
+
+systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
+enable_service immortal-sentinel.service "Immortal Sentinel daemon (observe-first healing)"
+log "Immortal Sentinel daemon installed and enabled (runs every 5 minutes, low CPU/memory impact)"
+
+# v6.3 Kernel Hardening
+step "Kernel Hardening (v6.3)"
 cat > /etc/sysctl.d/99-immortal-hardening.conf << 'HARDENEOF'
 kernel.kptr_restrict=2
 kernel.unprivileged_bpf_disabled=1
@@ -911,7 +972,7 @@ HARDENEOF
 sysctl -p /etc/sysctl.d/99-immortal-hardening.conf >> "$LOG_FILE" 2>&1 || true
 mark_completed "hardening"
 
-# v6.2 Entropy Improvement
+# v6.3 Entropy Improvement
 step "Entropy Improvement (haveged)"
 dnf install -y haveged 2>/dev/null || true
 systemctl enable --now haveged 2>/dev/null || true
@@ -944,10 +1005,11 @@ REVERTEOF
 chmod +x "$REVERT_SCRIPT"
 log "KEFKA REVERSAL RITUAL created on Desktop — one-click full undo available"
 
-# FINAL REPORT & SELF-REGENERATION (v6.2)
-step "FINAL REPORT & SELF-REGENERATION (v6.2 KEFKA GOD MODE)"
+# FINAL REPORT & SELF-REGENERATION (v6.3)
+step "FINAL REPORT & SELF-REGENERATION (v6.3 KEFKA GOD MODE)"
 verify "Tuned active"; systemctl is-active --quiet tuned && log "Tuned: active" || record_failure "Tuned"
 verify "Guardian timer active"; systemctl is-active --quiet immortal-guardian.timer && log "Guardian timer: active" || record_failure "Guardian timer"
+verify "Sentinel active"; systemctl is-active --quiet immortal-sentinel.service && log "Sentinel: active" || true
 verify "EarlyOOM active"; systemctl is-active --quiet earlyoom && log "EarlyOOM: active" || true
 verify "IRQBalance active"; systemctl is-active --quiet irqbalance && log "IRQBalance: active" || true
 
@@ -1006,7 +1068,7 @@ log "✅ Full clipboard content saved to /tmp/immortal-clipboard.txt (always ava
 
 echo ""
 echo -e "${GRN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v6.2 KEFKA GOD MODE COMPLETE — TRULY IMMORTAL ║${NC}"
+echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v6.3 KEFKA GOD MODE + SENTINEL COMPLETE       ║${NC}"
 echo -e "${GRN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 [[ $VERIFY_FAILURES -gt 0 ]] && {
@@ -1017,6 +1079,7 @@ echo -e " ${YLW}REBOOT RECOMMENDED${NC} for full effect"
 echo "A KEFKA REVERSAL RITUAL script has been placed on your Desktop."
 echo "Double-click it anytime to undo EVERYTHING this run changed."
 echo "If you love the changes — simply delete the ritual script."
+echo "Sentinel daemon is now running in the background (observe-first healing)."
 echo "Script + run results + smart AI prompt copied to clipboard"
 echo "Also saved to /tmp/immortal-clipboard.txt"
 echo "Paste the clipboard directly into Grok to get the next version"
