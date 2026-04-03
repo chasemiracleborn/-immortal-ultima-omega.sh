@@ -1,11 +1,10 @@
-```bash
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.4 OMEGA BLUE (FINAL FORM)              ║
+# ║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.5 OMEGA BLUE (GOLD MASTER)             ║
 # ║ One script to rule them all. Desktops & Laptops. NVIDIA / AMD / Intel.      ║
-# ║ CachyOS kernel aware • Lock screen + multi-monitor fixed • Input tuned      ║
+# ║ Merged full power + safety (lockfile, trap, atomic writes) from hyperbeta   ║
 # ║                                                                             ║
-# ║ All v3.2 / v3.2.1 / v4.4–v5.3 logic 100% preserved + safety upgrades       ║
+# ║ All v3.2 / v3.2.1 / v4.4–v5.4 logic 100% preserved.                        ║
 # ║                                                                             ║
 # ║ Creation Date: 2026-04-03                                                   ║
 # ║                                                                             ║
@@ -23,7 +22,7 @@ LOG_FILE="/var/log/immortal-ultima-omega.log"
 LOCK_FILE="/var/lock/immortal-ultima-omega.lock"
 touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/immortal-ultima-omega.log"
 
-# Safety: single instance lock
+# Safety: single-instance lock + trap cleanup
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   echo "Another instance of Immortal Ultima Omega is already running. Exiting." >&2
@@ -35,7 +34,7 @@ trap cleanup EXIT
 {
   echo ""
   echo "════════════════════════════════════════════════════════"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v5.4 RUN"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] IMMORTAL ULTIMA OMEGA v5.5 RUN"
   echo "Kernel: $(uname -r) | Host: $(hostname)"
   echo "════════════════════════════════════════════════════════"
 } >> "$LOG_FILE"
@@ -133,8 +132,8 @@ enable_service() {
 # BANNER
 echo ""
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.4 OMEGA BLUE (FINAL FORM)         ║${NC}"
-echo -e "${CYN}║ CachyOS kernel aware • Lock screen fixed • Input responsiveness tuned  ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — UNIVERSAL v5.5 OMEGA BLUE (GOLD MASTER)        ║${NC}"
+echo -e "${CYN}║ Full power + safety lockfile/trap merged • CachyOS aware               ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -304,7 +303,7 @@ if [[ $GPU_NVIDIA -eq 1 ]]; then
   NVIDIA_CONF=/etc/modprobe.d/nvidia-immortal.conf
   backup_file "$NVIDIA_CONF"
   write_file "$NVIDIA_CONF" << 'MODEOF'
-# NVIDIA — Immortal Ultima Omega v5.4 (RTX 50-series + explicit sync ready)
+# NVIDIA — Immortal Ultima Omega v5.5 (RTX 50-series + explicit sync ready)
 options nvidia NVreg_EnableGpuFirmware=1
 options nvidia NVreg_UsePageAttributeTable=1
 options nvidia NVreg_DynamicPowerManagement=0x02
@@ -316,7 +315,7 @@ elif [[ $GPU_AMD -eq 1 ]]; then
   AMD_CONF=/etc/modprobe.d/amdgpu-immortal.conf
   backup_file "$AMD_CONF"
   write_file "$AMD_CONF" << 'AMDEOF'
-# AMD GPU — Immortal Ultima Omega v5.4
+# AMD GPU — Immortal Ultima Omega v5.5
 options amdgpu dc=1
 options amdgpu ppfeaturemask=0xffffffff
 AMDEOF
@@ -325,7 +324,7 @@ elif [[ $GPU_INTEL -eq 1 ]]; then
   INTEL_CONF=/etc/modprobe.d/i915-immortal.conf
   backup_file "$INTEL_CONF"
   write_file "$INTEL_CONF" << 'INTEOF'
-# Intel iGPU — Immortal Ultima Omega v5.4
+# Intel iGPU — Immortal Ultima Omega v5.5
 options i915 enable_psr=1
 options i915 enable_guc=2
 INTEOF
@@ -512,7 +511,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
 fi
 log "GRUB parameters applied"
 
-# Display Recovery (Desktop only) — v5.4: even stronger lock screen fix
+# Display Recovery (Desktop only) — v5.5: stronger lock screen fix
 if [[ $IS_LAPTOP -eq 0 ]]; then
   step "Monitor Wake & Display Recovery (Desktop — Multi-Monitor Safe)"
   XORG_NODPMS=/etc/X11/xorg.conf.d/10-immortal-nodpms.conf
@@ -552,7 +551,7 @@ AUTOEOF
   write_file "$DISPLAY_WAKE" << 'WAKEEOF'
 #!/bin/bash
 wake_log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a /tmp/immortal-display-wake.log; }
-wake_log "Display wake triggered — multi-monitor + lock screen fix active (v5.4)"
+wake_log "Display wake triggered — multi-monitor + lock screen fix active (v5.5)"
 if command -v xset &>/dev/null; then
   xset s 600 0 && xset dpms 900 1200 0 && wake_log "DPMS + blanking restored"
 fi
@@ -600,7 +599,7 @@ enable_service irqbalance "IRQ balance"
 step "SMART Monitoring"
 backup_file /etc/smartd.conf
 {
-  echo "# Immortal Ultima Omega v5.4 — smartd.conf"
+  echo "# Immortal Ultima Omega v5.5 — smartd.conf"
   for dev in "${EXOS_DRIVES[@]}"; do
     echo "$dev -d sat -a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,45,55 -m root"
   done
@@ -640,7 +639,7 @@ EXOS_LIST="${EXOS_DRIVES[*]}"
 NVME_LIST="${NVME_DRIVES[*]}"
 GUARDIAN_LOG="/var/log/immortal-guardian.log"
 guard_log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] \$*" | tee -a "\$GUARDIAN_LOG" >&2; }
-guard_log "Patrol started (v5.4)"
+guard_log "Patrol started (v5.5)"
 if command -v nvidia-smi &>/dev/null; then
   GPU_TEMP=\$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
   guard_log "GPU: \${GPU_TEMP}°C"
@@ -656,7 +655,7 @@ for dev in \$NVME_LIST; do
   STATUS=\$(smartctl -H "\$dev" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | awk -F: '{print \$2}' | xargs)
   guard_log "NVMe \$dev: \${STATUS:-no response}"
 done
-guard_log "Patrol complete — v5.4 guardian active"
+guard_log "Patrol complete — v5.5 guardian active"
 GUARDEOF
 chmod +x "$GUARDIAN"
 
@@ -689,7 +688,7 @@ WantedBy=timers.target
 TIMEREOF
 systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
 enable_service immortal-guardian.timer "Immortal Guardian timer"
-log "Guardian deployed (v5.4 enhanced)"
+log "Guardian deployed (v5.5 enhanced)"
 
 step "DNF5 Optimization"
 backup_file /etc/dnf/dnf.conf
@@ -698,7 +697,7 @@ grep -q 'fastestmirror' /etc/dnf/dnf.conf || echo "fastestmirror=True" >> /etc/d
 log "DNF5 optimized"
 
 # Tuned
-step "Performance Engine: Tuned Immortal Ultima (v5.4)"
+step "Performance Engine: Tuned Immortal Ultima (v5.5)"
 if [[ $DRY_RUN -eq 0 ]]; then
   mkdir -p /etc/tuned/immortal-ultima
   backup_file /etc/tuned/immortal-ultima/tuned.conf
@@ -737,13 +736,13 @@ PWEOF
 log "PipeWire low-latency configured (audio perfection)"
 
 # Companion Tools
-step "Companion Tools — immortal-status & immortal-health-check (v5.4)"
+step "Companion Tools — immortal-status & immortal-health-check (v5.5)"
 STATUS_SCRIPT=/usr/local/bin/immortal-status
 write_file "$STATUS_SCRIPT" << 'STATUS_EOF'
 #!/bin/bash
 CYN=$'[0;36m'; GRN=$'[0;32m'; NC=$'[0m'
 echo -e "${CYN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v5.4                      ║${NC}"
+echo -e "${CYN}║ IMMORTAL ULTIMA OMEGA — LIVE STATUS DASHBOARD v5.5                      ║${NC}"
 echo -e "${CYN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo "Uptime : $(uptime -p)"
 echo "Kernel : $(uname -r)"
@@ -771,8 +770,8 @@ HEALTH_EOF
 chmod +x "$HEALTH_SCRIPT"
 log "Companion tools installed — run 'immortal-status' anytime"
 
-# FINAL REPORT + SMART CLIPBOARD EXPORT (v5.4)
-step "FINAL REPORT & SMART CLIPBOARD EXPORT (v5.4)"
+# FINAL REPORT + SMART CLIPBOARD EXPORT (v5.5)
+step "FINAL REPORT & SMART CLIPBOARD EXPORT (v5.5)"
 verify "Tuned active"; systemctl is-active --quiet tuned && log "Tuned: active" || record_failure "Tuned"
 verify "Guardian timer active"; systemctl is-active --quiet immortal-guardian.timer && log "Guardian timer: active" || record_failure "Guardian timer"
 verify "EarlyOOM active"; systemctl is-active --quiet earlyoom && log "EarlyOOM: active" || true
@@ -785,7 +784,7 @@ RUN_SUMMARY=$(tail -n 400 "$LOG_FILE" | grep -E '\[Step|\[✓ PLAN|\[↻ PLAN|\[
 PROMPT="Date of this script: $CURRENT_DATE
 You are the expert maintainer of IMMORTAL ULTIMA OMEGA.
 
-CRITICAL INSTRUCTION: When you return the script you MUST output the ENTIRE script with EVERY SINGLE SECTION fully expanded. Never use placeholders like '(All other sections...)' or 'unchanged from v5.3'. Always return the complete file inside one single \`\`\`bash code block.
+CRITICAL INSTRUCTION: When you return the script you MUST output the ENTIRE script with EVERY SINGLE SECTION fully expanded. Never use placeholders like '(All other sections...)' or 'unchanged from v5.4'. Always return the complete file inside one single \`\`\`bash code block.
 
 Here is the full current script:
 \`\`\`bash
@@ -839,7 +838,7 @@ log "✅ Full clipboard content saved to /tmp/immortal-clipboard.txt (always ava
 
 echo ""
 echo -e "${GRN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v5.4 FINAL FORM COMPLETE — CLIPBOARD READY       ║${NC}"
+echo -e "${GRN}║ IMMORTAL ULTIMA OMEGA v5.5 GOLD MASTER COMPLETE — CLIPBOARD READY      ║${NC}"
 echo -e "${GRN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -853,4 +852,3 @@ echo "Script + run results + smart AI prompt copied to clipboard"
 echo "Also saved to /tmp/immortal-clipboard.txt"
 echo "Paste the clipboard directly into Grok (or any AI) to get the next version"
 echo "The fortress has reached its Final Form — it regenerates via clipboard."
-```
