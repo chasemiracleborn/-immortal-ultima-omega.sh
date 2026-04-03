@@ -25,9 +25,6 @@
 # NOTE: This script makes system-level changes. Read it before running.
 #       Use --dry-run to preview actions. Use --yes to run non-interactively.
 #
-# Usage:
-#   sudo ./immortal-ultima-omega.sh [--dry-run] [--yes] [--verbose] [--help]
-#
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -107,8 +104,13 @@ write_file_atomic() {
   local tmp
   tmp="$(mktemp "${dest}.tmp.XXXXXX")"
   cat >"$tmp"
-  run_cmd "mv -- \"$tmp\" \"$dest\""
-  run_cmd "chmod 0644 \"$dest\""
+  if [[ $DRY_RUN -eq 1 ]]; then
+    info "DRY-RUN: Would move $tmp -> $dest and set permissions"
+    rm -f "$tmp" || true
+    return 0
+  fi
+  mv -- "$tmp" "$dest"
+  chmod 0644 "$dest"
 }
 
 # Backup a file if it exists
@@ -116,8 +118,12 @@ backup_file() {
   local file="$1"
   if [[ -e "$file" ]]; then
     local bak="${file}.bak.$(date +%Y%m%d%H%M%S)"
-    run_cmd "cp -a -- \"$file\" \"$bak\""
-    info "Backed up $file -> $bak"
+    if [[ $DRY_RUN -eq 1 ]]; then
+      info "DRY-RUN: Would copy $file -> $bak"
+    else
+      cp -a -- "$file" "$bak"
+      info "Backed up $file -> $bak"
+    fi
   fi
 }
 
@@ -130,21 +136,22 @@ require_root() {
 
 # Acquire exclusive lock to prevent concurrent runs
 acquire_lock() {
+  # Create lock dir if needed
+  mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
   exec 200>"$LOCK_FILE"
   if ! flock -n 200; then
     die "Another instance of $SCRIPT_NAME is running (lock: $LOCK_FILE)."
   fi
-  # Keep lock until script exits
+  # Keep lock until script exits; fd 200 remains open
 }
 
 # Cleanup handler
 cleanup() {
   local rc=$?
-  # Remove any temporary files created by mktemp (trap will handle)
-  # Release lock by closing fd 200
-  if [[ -n "${LOCK_FILE:-}" ]]; then
-    # closing fd 200 will release flock
-    exec 200>&-
+  # Release lock by closing fd 200 if open
+  if { true 2>/dev/null; } && [[ -n "${LOCK_FILE:-}" ]]; then
+    # Close fd 200 to release flock
+    exec 200>&- 2>/dev/null || true
   fi
   if [[ $rc -ne 0 ]]; then
     err "Script exited with status $rc"
@@ -306,14 +313,25 @@ update_grub_cmdline() {
   else
     warn "GRUB_CMDLINE_LINUX not found in $grub_cfg; skipping"
   fi
-  run_cmd "grub2-mkconfig -o /boot/grub2/grub.cfg || grub-mkconfig -o /boot/grub/grub.cfg"
-  info "Regenerated grub config"
+  # Regenerate grub config; try common locations
+  if command -v grub2-mkconfig >/dev/null 2>&1; then
+    run_cmd "grub2-mkconfig -o /boot/grub2/grub.cfg"
+  elif command -v grub-mkconfig >/dev/null 2>&1; then
+    run_cmd "grub-mkconfig -o /boot/grub/grub.cfg"
+  else
+    warn "No grub config generator found; please regenerate grub manually"
+  fi
+  info "Regenerated grub config (if supported)"
 }
 
 rebuild_dracut() {
   info "Rebuilding initramfs with dracut"
   if [[ $DRY_RUN -eq 1 ]]; then
     info "DRY-RUN: Would run dracut to rebuild initramfs for current kernel"
+    return 0
+  fi
+  if ! command -v dracut >/dev/null 2>&1; then
+    warn "dracut not found; skipping initramfs rebuild"
     return 0
   fi
   local kernel
@@ -327,7 +345,7 @@ rebuild_dracut() {
 # -------------------------
 set_selinux_permissive() {
   # This is a security-sensitive operation. Only do it if CONFIRMED or FORCE.
-  if [[ "$(command -v getenforce 2>/dev/null || true)" == "" ]]; then
+  if ! command -v getenforce >/dev/null 2>&1; then
     warn "SELinux tools not found; skipping SELinux handling"
     return 0
   fi
@@ -368,7 +386,7 @@ install_drivers() {
     warn "Driver installation skipped: require --yes or --force to proceed"
     return 0
   fi
-  # Example: install common firmware packages on Fedora
+  # Example: install common firmware packages on Fedora or Debian-based systems
   if command -v dnf >/dev/null 2>&1; then
     run_cmd "dnf -y install linux-firmware"
     info "Installed linux-firmware via dnf"
@@ -387,7 +405,6 @@ run_diagnostics() {
   info "Collecting system diagnostics (safe)"
   local out
   out="$(mktemp /tmp/immortal.diag.XXXXXX)"
-  trap 'rm -f "$out"' RETURN
   {
     printf '=== uname -a ===\n'
     uname -a
@@ -399,13 +416,15 @@ run_diagnostics() {
     dmesg | tail -n 200 || true
     printf '\n=== rpm -qa (if available) ===\n'
     if command -v rpm >/dev/null 2>&1; then rpm -qa | head -n 200; fi
-  } >"$out" 2>&1
+  } >"$out" 2>&1 || true
+
   if [[ $DRY_RUN -eq 1 ]]; then
     info "DRY-RUN: Diagnostics collected to $out (not persisted)"
-    sed -n '1,200p' "$out"
+    sed -n '1,200p' "$out" || true
+    rm -f "$out" || true
   else
     local dest="/var/log/immortal-ultima-omega.diag.$(date +%Y%m%d%H%M%S).log"
-    run_cmd "mv -- \"$out\" \"$dest\""
+    mv -- "$out" "$dest" || { warn "Failed to move diagnostics to $dest"; rm -f "$out" || true; return 0; }
     info "Diagnostics saved to $dest"
   fi
 }
