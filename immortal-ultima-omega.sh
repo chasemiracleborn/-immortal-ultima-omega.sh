@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  IMMORTAL ULTIMA OMEGA — v9.0 "FINAL ASCENSION"                           ║
+# ║  IMMORTAL ULTIMA OMEGA — v9.0 "FINAL ASCENSION" (FIXED & BALANCED)         ║
 # ║  Hardware-aware · Idempotent · Self-healing · Atomic writes · Rollback     ║
 # ║  Fedora + CachyOS · NVIDIA / AMD / Intel · Desktop & Laptop               ║
 # ║                                                                             ║
@@ -69,7 +69,6 @@ record_failure() { VERIFY_FAILURES=$((VERIFY_FAILURES+1)); FAILURE_LOG+=("$*"); 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ARGUMENT PARSING
-# NOTE: everything is ON by default. Use --no-X flags to disable.
 # ─────────────────────────────────────────────────────────────────────────────
 DRY_RUN=0; REVERT=0; FORCE=0; STATUS_ONLY=0; NO_BACKUP=0; SKIP_PKGS=0
 WANT_NETDATA=1; WANT_GAMING=1; WANT_SECURITY=1
@@ -109,8 +108,6 @@ BACKUP_DIR="/root/immortal-backups/$(date +%Y%m%d_%H%M%S)"
 # ─────────────────────────────────────────────────────────────────────────────
 # CORE HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
-
-# run: executes or dry-prints; non-fatal on failure
 run() {
   if [[ $DRY_RUN -eq 1 ]]; then
     echo -e " ${YLW}[DRY]${NC} $*"; return 0
@@ -118,7 +115,6 @@ run() {
   "$@" 2>>"$LOG_FILE" || warn "Non-fatal: $* returned $?"
 }
 
-# write_file: ATOMIC write via temp → mv (power-fail safe, peer-reviewed requirement)
 write_file() {
   local path="$1"; local content="$2"
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -130,7 +126,6 @@ write_file() {
   mv "$tmp" "$path"
 }
 
-# safe_write: idempotent append — skips if marker already in target
 safe_write() {
   local target="$1" marker="$2" content="$3"
   [[ $DRY_RUN -eq 1 ]] && { echo -e " ${YLW}[DRY]${NC} Would safe_write '$marker' → $target"; return 0; }
@@ -150,7 +145,6 @@ backup_file() {
 is_done()   { [[ -f "$MARKER_DIR/$1" ]] && [[ $FORCE -eq 0 ]]; }
 mark_done() { touch "$MARKER_DIR/$1" 2>/dev/null || true; }
 
-# enable_service: Plans A → C, then records failure (no Spirit Bomb overkill)
 enable_service() {
   local svc="$1" desc="${2:-$svc}"
   [[ $DRY_RUN -eq 1 ]] && { info "[DRY] Would enable: $svc"; return 0; }
@@ -159,8 +153,7 @@ enable_service() {
   fi
   warn "$svc: enable --now failed — daemon-reload and retry"
   systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
-  if systemctl enable "$svc" >>"$LOG_FILE" 2>&1 && \
-     systemctl start  "$svc" >>"$LOG_FILE" 2>&1; then
+  if systemctl enable "$svc" >>"$LOG_FILE" 2>&1 && systemctl start "$svc" >>"$LOG_FILE" 2>&1; then
     planb "Enabled (split): $desc"; return 0
   fi
   if systemctl enable --now --force "$svc" >>"$LOG_FILE" 2>&1; then
@@ -228,18 +221,14 @@ fi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # STAGE 0 — NORMALIZATION
-# Clean slate before applying — prevents stacked config from re-runs.
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 0 — Normalization"
 
 if [[ $REVERT -eq 1 ]]; then
   warn "REVERT: removing all immortal config and resetting to system defaults"
-
   run rm -rf "$STATE_DIR"
   run rm -f /var/log/immortal*.log
 
-  # BUG FIX 1: Removed 'local' keyword — 'local' is only valid inside a function.
-  # Using 'local' at global scope causes a fatal bash error with set -e.
   immortal_files=(
     /etc/sysctl.d/99-immortal-ultima-omega.conf
     /etc/sysctl.d/99-immortal-haste.conf
@@ -271,14 +260,12 @@ if [[ $REVERT -eq 1 ]]; then
   )
 
   for f in "${immortal_files[@]}"; do
-    # shellcheck disable=SC2086
-    [[ -e $f ]] && run rm -rf $f && info "Removed: $f"
+    [[ -e "$f" ]] && run rm -rf "$f" && info "Removed: $f"
   done
 
   run rm -rf /etc/tuned/immortal-ultima
   run systemctl daemon-reload
   command -v tuned-adm >/dev/null 2>&1 && run tuned-adm profile balanced
-  # Restore SELinux enforcing on revert
   if command -v getenforce >/dev/null 2>&1; then
     run sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
     run setenforce 1 2>/dev/null || true
@@ -290,10 +277,8 @@ if [[ $REVERT -eq 1 ]]; then
   exit 0
 fi
 
-# Non-revert: remove stale immortal units before re-laying them
 if [[ $DRY_RUN -eq 0 ]]; then
-  for old in /etc/systemd/system/immortal-*.service \
-             /etc/systemd/system/immortal-*.timer; do
+  for old in /etc/systemd/system/immortal-*.service /etc/systemd/system/immortal-*.timer; do
     [[ -e "$old" ]] && { info "Removing stale unit: $old"; rm -f "$old"; }
   done
   systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
@@ -320,9 +305,9 @@ KERNEL_VER=$(uname -r)
 IS_CACHYOS=0; CACHYOS_SCHED="unknown"
 if echo "$KERNEL_VER" | grep -qi cachyos; then
   IS_CACHYOS=1
-  if   echo "$KERNEL_VER" | grep -qi bore;  then CACHYOS_SCHED="bore"
-  elif echo "$KERNEL_VER" | grep -qi rt;    then CACHYOS_SCHED="rt"
-  elif echo "$KERNEL_VER" | grep -qi scx;   then CACHYOS_SCHED="scx"
+  if echo "$KERNEL_VER" | grep -qi bore; then CACHYOS_SCHED="bore"
+  elif echo "$KERNEL_VER" | grep -qi rt; then CACHYOS_SCHED="rt"
+  elif echo "$KERNEL_VER" | grep -qi scx; then CACHYOS_SCHED="scx"
   elif echo "$KERNEL_VER" | grep -qi eevdf; then CACHYOS_SCHED="eevdf"
   else CACHYOS_SCHED="eevdf"; fi
   log "CachyOS kernel: scheduler=${CACHYOS_SCHED^^}"
@@ -331,8 +316,7 @@ else
 fi
 
 HAS_SCX=0
-if [[ "$CACHYOS_SCHED" == "scx" ]] || modinfo scx_rusty >/dev/null 2>&1 || \
-   systemctl list-units --no-legend 'scx*' 2>/dev/null | grep -q scx; then
+if [[ "$CACHYOS_SCHED" == "scx" ]] || modinfo scx_rusty >/dev/null 2>&1 || systemctl list-units --no-legend 'scx*' 2>/dev/null | grep -q scx; then
   HAS_SCX=1; log "sched_ext (scx) available"
 fi
 
@@ -343,7 +327,7 @@ case "$CPU_VENDOR" in
   GenuineIntel) IS_INTEL_CPU=1; log "CPU: Intel — $CPU_MODEL" ;;
   AuthenticAMD)
     IS_AMD_CPU=1
-    echo "$CPU_MODEL" | grep -qi ryzen   && IS_RYZEN=1
+    echo "$CPU_MODEL" | grep -qi ryzen && IS_RYZEN=1
     echo "$CPU_MODEL" | grep -qi 'ryzen 9' && IS_RYZEN9=1
     log "CPU: AMD — $CPU_MODEL (Ryzen=$IS_RYZEN Ryzen9=$IS_RYZEN9)"
     ;;
@@ -351,23 +335,21 @@ case "$CPU_VENDOR" in
 esac
 
 GPU_NVIDIA=0; GPU_AMD=0; GPU_INTEL=0
-lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | grep -qi nvidia          && GPU_NVIDIA=1
+lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | grep -qi nvidia && GPU_NVIDIA=1
 lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | grep -qiE 'amd|radeon|ati' && GPU_AMD=1
-lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | grep -qi intel            && GPU_INTEL=1
+lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | grep -qi intel && GPU_INTEL=1
 [[ $GPU_NVIDIA -eq 1 ]] && log "GPU: NVIDIA"
-[[ $GPU_AMD -eq 1 ]]    && log "GPU: AMD"
-[[ $GPU_INTEL -eq 1 ]]  && log "GPU: Intel iGPU"
+[[ $GPU_AMD -eq 1 ]] && log "GPU: AMD"
+[[ $GPU_INTEL -eq 1 ]] && log "GPU: Intel iGPU"
 
 get_drive_model() {
-  smartctl -i "$1" 2>/dev/null | grep -Ei 'Device Model|Model Number' | \
-    head -1 | awk -F: '{print $2}' | xargs 2>/dev/null || echo "UNKNOWN"
+  smartctl -i "$1" 2>/dev/null | grep -Ei 'Device Model|Model Number' | head -1 | awk -F: '{print $2}' | xargs 2>/dev/null || echo "UNKNOWN"
 }
 EXOS_DRIVES=(); NVME_DRIVES=(); SATA_SSDS=(); UNKNOWN_SATA_ROT=()
 info "Scanning block devices..."
 for dev in /dev/sd[a-z] /dev/nvme[0-9]*n[0-9]; do
   [[ -b "$dev" ]] || continue
-  transport=$(udevadm info --query=property --name="$dev" 2>/dev/null | \
-              grep '^ID_BUS=' | cut -d= -f2 || echo "")
+  transport=$(udevadm info --query=property --name="$dev" 2>/dev/null | grep '^ID_BUS=' | cut -d= -f2 || echo "")
   [[ "$transport" == "usb" ]] && { warn "Skipping USB: $dev"; continue; }
   if [[ "$dev" == /dev/nvme* ]]; then
     NVME_DRIVES+=("$dev"); info " $dev — NVMe"; continue
@@ -382,10 +364,8 @@ for dev in /dev/sd[a-z] /dev/nvme[0-9]*n[0-9]; do
     SATA_SSDS+=("$dev"); info " $dev — SATA SSD"
   fi
 done
-SATA_HDDS=("${EXOS_DRIVES[@]+"${EXOS_DRIVES[@]}"}" \
-           "${UNKNOWN_SATA_ROT[@]+"${UNKNOWN_SATA_ROT[@]}"}")
 
-# ExtraStorage: validated before use
+# ExtraStorage validation
 EXTRA_MOUNTED=0; EXTRA_USABLE=0
 if mountpoint -q /mnt/ExtraStorage 2>/dev/null; then
   EXTRA_MOUNTED=1
@@ -409,8 +389,8 @@ command -v mdadm >/dev/null 2>&1 && grep -q '^md' /proc/mdstat 2>/dev/null && HA
 [[ $HAS_RAID -eq 1 ]] && log "MD RAID arrays detected"
 
 DE="unknown"
-pgrep -x gnome-shell   >/dev/null 2>&1 && DE="GNOME"
-pgrep -x plasmashell   >/dev/null 2>&1 && DE="KDE"
+pgrep -x gnome-shell >/dev/null 2>&1 && DE="GNOME"
+pgrep -x plasmashell >/dev/null 2>&1 && DE="KDE"
 [[ "$DE" == "unknown" && -n "${XDG_CURRENT_DESKTOP:-}" ]] && DE="$XDG_CURRENT_DESKTOP"
 log "DE: $DE"
 
@@ -477,8 +457,7 @@ fi
 if [[ $IS_CACHYOS -eq 1 && $SKIP_PKGS -eq 0 && $DRY_RUN -eq 0 ]]; then
   { dnf copr list 2>/dev/null || true; } | grep -q 'bieszczaders/kernel-cachyos' || \
     dnf copr enable -y bieszczaders/kernel-cachyos >>"$LOG_FILE" 2>&1 || true
-  [[ $HAS_SCX -eq 1 ]] && \
-    { dnf install -y scx-scheds >>"$LOG_FILE" 2>&1 || warn "scx-scheds unavailable"; }
+  [[ $HAS_SCX -eq 1 ]] && { dnf install -y scx-scheds >>"$LOG_FILE" 2>&1 || warn "scx-scheds unavailable"; }
 fi
 
 PKGS=(
@@ -487,12 +466,12 @@ PKGS=(
   powertop sysstat cronie xorg-x11-utils fwupd
   tuned tuned-ppd xclip wl-clipboard rng-tools curl
 )
-[[ $GPU_NVIDIA -eq 1 ]]                   && PKGS+=(akmod-nvidia xorg-x11-drv-nvidia-cuda)
-[[ $GPU_AMD -eq 1 || $GPU_INTEL -eq 1 ]]  && PKGS+=(mesa-va-drivers)
-[[ $IS_LAPTOP -eq 1 ]]                    && PKGS+=(power-profiles-daemon thermald tlp)
-[[ $WANT_NETDATA -eq 1 ]]                 && PKGS+=(netdata)
-[[ $WANT_GAMING -eq 1 ]]                  && PKGS+=(gamemode mangohud steam)
-[[ $WANT_SECURITY -eq 1 ]]                && PKGS+=(fail2ban)
+[[ $GPU_NVIDIA -eq 1 ]] && PKGS+=(akmod-nvidia xorg-x11-drv-nvidia-cuda)
+[[ $GPU_AMD -eq 1 || $GPU_INTEL -eq 1 ]] && PKGS+=(mesa-va-drivers)
+[[ $IS_LAPTOP -eq 1 ]] && PKGS+=(power-profiles-daemon thermald tlp)
+[[ $WANT_NETDATA -eq 1 ]] && PKGS+=(netdata)
+[[ $WANT_GAMING -eq 1 ]] && PKGS+=(gamemode mangohud steam)
+[[ $WANT_SECURITY -eq 1 ]] && PKGS+=(fail2ban)
 
 if [[ $SKIP_PKGS -eq 1 ]]; then
   warn "Packages skipped"
@@ -503,30 +482,24 @@ else
     planb "Bulk install failed — retrying individually"
     for pkg in "${PKGS[@]}"; do
       rpm -q "$pkg" &>/dev/null && continue
-      dnf install -y "$pkg" >>"$LOG_FILE" 2>&1 && log "Installed: $pkg" \
-        || warn "Could not install: $pkg (non-fatal)"
+      dnf install -y "$pkg" >>"$LOG_FILE" 2>&1 && log "Installed: $pkg" || warn "Could not install: $pkg (non-fatal)"
     done
   else
     log "All packages installed"
   fi
-  # BUG FIX 2: 'dnf swap' requires dnf-utils and is fragile.
-  # Use 'dnf install --allowerasing' instead — it's native and reliable.
-  [[ $GPU_AMD -eq 1 || $GPU_INTEL -eq 1 ]] && \
-    { dnf install -y mesa-va-drivers-freeworld --allowerasing >>"$LOG_FILE" 2>&1 || true; }
+  [[ $GPU_AMD -eq 1 || $GPU_INTEL -eq 1 ]] && { dnf install -y mesa-va-drivers-freeworld --allowerasing >>"$LOG_FILE" 2>&1 || true; }
   if [[ $GPU_NVIDIA -eq 1 ]] && ! rpm -q akmod-nvidia &>/dev/null; then
     dnf install -y akmod-nvidia xorg-x11-drv-nvidia-cuda >>"$LOG_FILE" 2>&1 || true
   fi
   command -v akmods >/dev/null 2>&1 && akmods --force >>"$LOG_FILE" 2>&1 || true
   systemctl enable --now rngd >>"$LOG_FILE" 2>&1 || true
-  grep -q 'max_parallel_downloads' /etc/dnf/dnf.conf 2>/dev/null || \
-    echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
-  grep -q 'fastestmirror' /etc/dnf/dnf.conf 2>/dev/null || \
-    echo "fastestmirror=True" >> /etc/dnf/dnf.conf
+  grep -q 'max_parallel_downloads' /etc/dnf/dnf.conf 2>/dev/null || echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
+  grep -q 'fastestmirror' /etc/dnf/dnf.conf 2>/dev/null || echo "fastestmirror=True" >> /etc/dnf/dnf.conf
   log "DNF parallelism configured"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STAGE 5 — FIRMWARE (notify, no force-apply)
+# STAGE 5 — FIRMWARE
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 5 — Firmware Check"
 
@@ -578,25 +551,21 @@ options i915 enable_guc=2"
   log "Intel i915 modprobe written"
 fi
 
-# NVMe PS0 lock — desktop only (laptops use power states for battery life)
 if [[ $IS_LAPTOP -eq 0 && ${#NVME_DRIVES[@]} -gt 0 ]]; then
   backup_file /etc/modprobe.d/nvme-immortal.conf
   write_file /etc/modprobe.d/nvme-immortal.conf \
 "# Immortal v9.0 — NVMe PS0 lock (desktop only)
 options nvme_core default_ps_max_latency_us=0"
-  [[ $DRY_RUN -eq 0 ]] && \
-    echo "0" > /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null || true
+  [[ $DRY_RUN -eq 0 ]] && echo "0" > /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null || true
   log "NVMe PS0 lock (desktop)"
 else
   info "NVMe PS0 lock skipped (laptop or no NVMe)"
 fi
 
-# USB autosuspend disable
 write_file /etc/modprobe.d/usb-stability.conf \
 "# Immortal v9.0 — USB stability
 options usbcore autosuspend=-1"
 
-# IO schedulers
 backup_file /etc/udev/rules.d/60-immortal-io.rules
 write_file /etc/udev/rules.d/60-immortal-io.rules \
 'ACTION=="add|change", KERNEL=="nvme*n*", ATTR{queue/scheduler}="none"
@@ -607,12 +576,10 @@ ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="1", ATTR{queu
 ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"
 ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="0", ATTR{queue/read_ahead_kb}="512"'
 
-# Touchpad/USB keepalive
 write_file /etc/udev/rules.d/99-touchpad-keepalive.rules \
 'ACTION=="add", SUBSYSTEM=="input", ATTR{power/control}="on"
 ACTION=="add", SUBSYSTEM=="usb", ATTR{power/control}="on"'
 
-# EXOS APM disable
 if [[ ${#EXOS_DRIVES[@]} -gt 0 ]]; then
   write_file /etc/udev/rules.d/61-seagate-exos-apm.rules \
     'ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="1", RUN+="/usr/bin/hdparm -B 255 -S 0 /dev/%k"'
@@ -628,7 +595,7 @@ fi
 log "udev rules applied"
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STAGE 7 — FSTAB + ZRAM + SWAP
+# STAGE 7 — FSTAB + ZRAM + SWAP + TIMESIFT 250GB LIMIT
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 7 — fstab / ZRAM / Swap"
 
@@ -642,7 +609,7 @@ fi
 
 ZRAM_SIZE=$(( TOTAL_RAM_GB / 2 ))
 [[ $ZRAM_SIZE -gt 16 ]] && ZRAM_SIZE=16
-[[ $ZRAM_SIZE -lt 4 ]]  && ZRAM_SIZE=4
+[[ $ZRAM_SIZE -lt 4 ]] && ZRAM_SIZE=4
 backup_file /etc/systemd/zram-generator.conf
 write_file /etc/systemd/zram-generator.conf \
 "[zram0]
@@ -651,23 +618,37 @@ compression-algorithm = zstd
 swap-priority = 100"
 log "ZRAM: ${ZRAM_SIZE}GB zstd"
 
-# Tier-2 swapfile — only if ExtraStorage passed all validation checks
 if [[ $EXTRA_USABLE -eq 1 ]]; then
   SWAPFILE=/mnt/ExtraStorage/swapfile
   if [[ ! -f "$SWAPFILE" ]]; then
     run fallocate -l 8G "$SWAPFILE"
     run chmod 600 "$SWAPFILE"
     run mkswap "$SWAPFILE"
-    grep -q "$SWAPFILE" /etc/fstab 2>/dev/null || \
-      echo "$SWAPFILE none swap defaults,pri=10 0 0" >> /etc/fstab
+    grep -q "$SWAPFILE" /etc/fstab 2>/dev/null || echo "$SWAPFILE none swap defaults,pri=10 0 0" >> /etc/fstab
     run swapon "$SWAPFILE"
     log "8GB Tier-2 swapfile created on ExtraStorage"
   else
     info "Tier-2 swapfile already exists"
     run swapon -a
   fi
+
+  # TIMESIFT 250 GB LIMIT
+  TIMESIFT_CONF="/mnt/ExtraStorage/timeshift/timeshift.json"
+  mkdir -p "/mnt/ExtraStorage/timeshift"
+  if [[ ! -f "$TIMESIFT_CONF" ]]; then
+    cat > "$TIMESIFT_CONF" << EOF
+{
+  "version": "1.0",
+  "max_snapshots": 10,
+  "max_size_gb": 250
+}
+EOF
+  else
+    sed -i 's/"max_size_gb":[[:space:]]*[0-9]*/"max_size_gb": 250/' "$TIMESIFT_CONF" 2>/dev/null || true
+  fi
+  log "Timeshift limited to 250 GB max on ExtraStorage"
 elif [[ $EXTRA_MOUNTED -eq 1 ]]; then
-  info "ExtraStorage present but failed validation — swap skipped (safe)"
+  info "ExtraStorage present but failed validation — swap/Timeshift skipped (safe)"
 fi
 
 [[ $DRY_RUN -eq 0 ]] && systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
@@ -693,12 +674,10 @@ net.ipv4.conf.all.rp_filter=1
 kernel.dmesg_restrict=1
 kernel.sched_autogroup_enabled=1"
 
-sysctl kernel.sched_itmt_enabled >/dev/null 2>&1 && \
-  SYSCTL_CONTENT+=$'\nkernel.sched_itmt_enabled=1'
+sysctl kernel.sched_itmt_enabled >/dev/null 2>&1 && SYSCTL_CONTENT+=$'\nkernel.sched_itmt_enabled=1'
 
 if [[ "$CACHYOS_SCHED" == "bore" ]]; then
-  for knob in kernel.sched_bore kernel.sched_min_base_slice_ns \
-              kernel.sched_wakeup_granularity_ns kernel.sched_latency_ns; do
+  for knob in kernel.sched_bore kernel.sched_min_base_slice_ns kernel.sched_wakeup_granularity_ns kernel.sched_latency_ns; do
     sysctl "$knob" >/dev/null 2>&1 || continue
     case "$knob" in
       kernel.sched_bore)                  SYSCTL_CONTENT+=$'\n'"${knob}=1" ;;
@@ -710,8 +689,7 @@ if [[ "$CACHYOS_SCHED" == "bore" ]]; then
   log "BORE scheduler sysctl applied"
 fi
 if [[ "$CACHYOS_SCHED" == "eevdf" || $IS_CACHYOS -eq 0 ]]; then
-  sysctl kernel.sched_min_granularity_ns >/dev/null 2>&1 && \
-    SYSCTL_CONTENT+=$'\nkernel.sched_min_granularity_ns=1000000'
+  sysctl kernel.sched_min_granularity_ns >/dev/null 2>&1 && SYSCTL_CONTENT+=$'\nkernel.sched_min_granularity_ns=1000000'
 fi
 
 write_file /etc/sysctl.d/99-immortal-ultima-omega.conf "$SYSCTL_CONTENT"
@@ -746,27 +724,22 @@ log "Sysctl applied (core + HASTE + hardening)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # STAGE 9 — GRUB KERNEL PARAMS
-# BUG FIX 3: grubby --args requires a space-separated string, not --args=
-# Using --args "${KERNEL_ARGS[*]}" (space, not =) passes all args correctly.
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 9 — GRUB Kernel Parameters"
 
 REMOVE_ARGS=("nvidia.NVreg_PreserveVideoMemoryAllocations=1" "nvidia.NVreg_EnableGpuFirmware=0")
 KERNEL_ARGS=("nouveau.modeset=0" "pcie_aspm=off" "nmi_watchdog=1")
-[[ $GPU_NVIDIA -eq 1 ]] && \
-  KERNEL_ARGS+=("nvidia-drm.modeset=1" "nvidia-drm.fbdev=1" "nvidia.NVreg_EnableGpuFirmware=1")
-[[ $IS_AMD_CPU -eq 1 ]]                    && KERNEL_ARGS+=("amd_pstate=active")
+[[ $GPU_NVIDIA -eq 1 ]] && KERNEL_ARGS+=("nvidia-drm.modeset=1" "nvidia-drm.fbdev=1" "nvidia.NVreg_EnableGpuFirmware=1")
+[[ $IS_AMD_CPU -eq 1 ]] && KERNEL_ARGS+=("amd_pstate=active")
 [[ $IS_INTEL_CPU -eq 1 && $IS_LAPTOP -eq 1 ]] && KERNEL_ARGS+=("i915.enable_psr=1")
-[[ $IS_LAPTOP -eq 1 ]]                     && KERNEL_ARGS+=("processor.max_cstate=5")
-[[ "$CACHYOS_SCHED" == "bore" ]]           && KERNEL_ARGS+=("sched_bore=1")
+[[ $IS_LAPTOP -eq 1 ]] && KERNEL_ARGS+=("processor.max_cstate=5")
+[[ "$CACHYOS_SCHED" == "bore" ]] && KERNEL_ARGS+=("sched_bore=1")
 
 if [[ $DRY_RUN -eq 0 ]]; then
   if command -v grubby >/dev/null 2>&1; then
-    # BUG FIX 3: use space separator (not =) so grubby parses correctly
     grubby --update-kernel=ALL --remove-args "${REMOVE_ARGS[*]}" >>"$LOG_FILE" 2>&1 || true
     grubby --update-kernel=ALL --args "${KERNEL_ARGS[*]}" >>"$LOG_FILE" 2>&1 || true
-    [[ $GPU_NVIDIA -eq 1 ]] && command -v dracut >/dev/null 2>&1 && \
-      dracut -f >>"$LOG_FILE" 2>&1 && log "dracut regenerated"
+    [[ $GPU_NVIDIA -eq 1 ]] && command -v dracut >/dev/null 2>&1 && dracut -f >>"$LOG_FILE" 2>&1 && log "dracut regenerated"
     log "GRUB args: ${KERNEL_ARGS[*]}"
   else
     warn "grubby not found — GRUB params not updated"
@@ -776,7 +749,7 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STAGE 10 — TUNED + LAPTOP POWER GUARD
+# STAGE 10 — TUNED + LAPTOP POWER GUARD (BALANCED ON DESKTOP)
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 10 — Tuned Profile + Laptop Power Guard"
 
@@ -796,8 +769,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
   mkdir -p /etc/tuned/immortal-ultima
   backup_file /etc/tuned/immortal-ultima/tuned.conf
 
-  if [[ $IS_LAPTOP -eq 1 ]]; then
-    cat > /etc/tuned/immortal-ultima/tuned.conf <<'TUNED_EOF'
+  cat > /etc/tuned/immortal-ultima/tuned.conf <<'TUNED_EOF'
 [main]
 include=balanced
 [sysctl]
@@ -812,36 +784,18 @@ energy_perf_bias=normal
 [io]
 readahead=4096
 TUNED_EOF
-    log "Tuned: schedutil (laptop — battery safe)"
-  else
-    cat > /etc/tuned/immortal-ultima/tuned.conf <<'TUNED_EOF'
-[main]
-include=balanced
-[sysctl]
-vm.swappiness=5
-vm.dirty_background_bytes=536870912
-vm.dirty_bytes=2147483648
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-[cpu]
-governor=performance
-[io]
-readahead=4096
-TUNED_EOF
-    log "Tuned: performance governor (desktop)"
-  fi
 
-  tuned-adm profile immortal-ultima >>"$LOG_FILE" 2>&1 || true
+  log "Tuned: balanced profile (desktop stability first)"
 fi
+
+tuned-adm profile immortal-ultima >>"$LOG_FILE" 2>&1 || run tuned-adm profile balanced
 enable_service tuned "Tuned immortal-ultima"
 
 if [[ $IS_LAPTOP -eq 1 ]]; then
   write_file /etc/udev/rules.d/62-immortal-battery.rules \
 '# Immortal v9.0 — auto-switch tuned profile on AC state change
-ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="1", \
-  RUN+="/usr/sbin/tuned-adm profile immortal-ultima"
-ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="0", \
-  RUN+="/usr/sbin/tuned-adm profile balanced"'
+ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="1", RUN+="/usr/sbin/tuned-adm profile immortal-ultima"
+ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="0", RUN+="/usr/sbin/tuned-adm profile balanced"'
   [[ $DRY_RUN -eq 0 ]] && udevadm control --reload-rules 2>/dev/null || true
   log "Laptop battery guard: AC → immortal-ultima | Battery → balanced (auto-switch)"
 
@@ -859,8 +813,7 @@ WantedBy=multi-user.target'
   enable_service mobile-omega-powertop.service "powertop auto-tune"
   enable_service thermald "thermald"
 
-  if [[ $DRY_RUN -eq 0 ]] && [[ -w /sys/power/mem_sleep ]] && \
-     grep -q deep /sys/power/mem_sleep 2>/dev/null; then
+  if [[ $DRY_RUN -eq 0 ]] && [[ -w /sys/power/mem_sleep ]] && grep -q deep /sys/power/mem_sleep 2>/dev/null; then
     echo "deep" > /sys/power/mem_sleep; log "mem_sleep: deep (S3)"
   fi
 fi
@@ -870,8 +823,7 @@ if [[ $HAS_SCX -eq 1 && $DRY_RUN -eq 0 ]]; then
     SCX_SCHED="scx_rusty"
     [[ $IS_LAPTOP -eq 1 ]] && SCX_SCHED="scx_lavd"
     if [[ -f /etc/scx.conf ]]; then
-      sed -i "s/^SCX_SCHEDULER=.*/SCX_SCHEDULER=$SCX_SCHED/" /etc/scx.conf || \
-        echo "SCX_SCHEDULER=$SCX_SCHED" >> /etc/scx.conf
+      sed -i "s/^SCX_SCHEDULER=.*/SCX_SCHEDULER=$SCX_SCHED/" /etc/scx.conf || echo "SCX_SCHEDULER=$SCX_SCHED" >> /etc/scx.conf
     else
       echo "SCX_SCHEDULER=$SCX_SCHED" > /etc/scx.conf
     fi
@@ -889,16 +841,13 @@ backup_file /etc/systemd/system/earlyoom.service.d/tuning.conf
 write_file /etc/systemd/system/earlyoom.service.d/tuning.conf \
 '[Service]
 ExecStart=
-ExecStart=/usr/sbin/earlyoom -r 60 -m 5 -s 5 \
-  --prefer "(firefox|chromium|electron|code|brave|java)" \
-  --avoid  "(sddm|pipewire|wireplumber|kwin_x11|kwin_wayland|plasmashell|Xorg|nvidia|earlyoom)"'
+ExecStart=/usr/sbin/earlyoom -r 60 -m 5 -s 5 --prefer "(firefox|chromium|electron|code|brave|java)" --avoid "(sddm|pipewire|wireplumber|kwin_x11|kwin_wayland|plasmashell|Xorg|nvidia|earlyoom)"'
 [[ $DRY_RUN -eq 0 ]] && systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
 enable_service earlyoom "EarlyOOM"
 
 if [[ $DRY_RUN -eq 0 ]]; then
   if [[ -f /etc/sysconfig/irqbalance ]]; then
-    grep -q 'IRQBALANCE_ONESHOT' /etc/sysconfig/irqbalance || \
-      echo 'IRQBALANCE_ONESHOT=yes' >> /etc/sysconfig/irqbalance
+    grep -q 'IRQBALANCE_ONESHOT' /etc/sysconfig/irqbalance || echo 'IRQBALANCE_ONESHOT=yes' >> /etc/sysconfig/irqbalance
   else
     echo 'IRQBALANCE_ONESHOT=yes' > /etc/sysconfig/irqbalance 2>/dev/null || true
   fi
@@ -917,8 +866,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
     for dev in "${NVME_DRIVES[@]+"${NVME_DRIVES[@]}"}"; do
       echo "$dev -a -n standby,q -s (S/../.././02|L/../../6/03) -W 4,60,70 -m root"
     done
-    [[ ${#EXOS_DRIVES[@]} -eq 0 && ${#NVME_DRIVES[@]} -eq 0 ]] && \
-      echo "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,55,65 -m root"
+    [[ ${#EXOS_DRIVES[@]} -eq 0 && ${#NVME_DRIVES[@]} -eq 0 ]] && echo "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,55,65 -m root"
   } > /etc/smartd.conf
 fi
 enable_service smartd "SMART monitoring"
@@ -950,7 +898,6 @@ log "PipeWire low-latency configured"
 DISPLAY_WAKE=/usr/local/bin/immortal-display-wake
 write_file "$DISPLAY_WAKE" \
 '#!/bin/bash
-# Immortal v9.0 — Display wake (user-context, minimal safe)
 LOG=/tmp/immortal-display-wake.log
 echo "[$(date +%T)] Display wake triggered" >> "$LOG"
 [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && exit 0
@@ -972,8 +919,7 @@ Type=Application
 Exec=bash -c "sleep 8 && /usr/local/bin/immortal-display-wake"
 X-KDE-Autostart-Phase=2'
 
-command -v fc-cache >/dev/null 2>&1 && \
-  { [[ $DRY_RUN -eq 0 ]] && fc-cache -f >>"$LOG_FILE" 2>&1 || true; log "fontconfig cache rebuilt"; }
+command -v fc-cache >/dev/null 2>&1 && { [[ $DRY_RUN -eq 0 ]] && fc-cache -f >>"$LOG_FILE" 2>&1 || true; log "fontconfig cache rebuilt"; }
 
 if [[ -d "$REAL_HOME/.mozilla/firefox" ]]; then
   FF_PROF=$(find "$REAL_HOME/.mozilla/firefox" -maxdepth 1 -name "*.default-release" -type d 2>/dev/null | head -1)
@@ -988,8 +934,7 @@ if [[ -d "$REAL_HOME/.mozilla/firefox" ]]; then
       ['general.smoothScroll']='true'
     )
     for key in "${!FF_PREFS[@]}"; do
-      grep -q "\"${key}\"" "$USER_JS" 2>/dev/null || \
-        echo "user_pref(\"${key}\", ${FF_PREFS[$key]});" >> "$USER_JS"
+      grep -q "\"${key}\"" "$USER_JS" 2>/dev/null || echo "user_pref(\"${key}\", ${FF_PREFS[$key]});" >> "$USER_JS"
     done
     chown "$REAL_USER:$REAL_USER" "$USER_JS" 2>/dev/null || true
     log "Firefox user.js updated"
@@ -998,15 +943,11 @@ fi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # STAGE 12 — GAMING: BAKED INTO THE OS
-# BUG FIX 4: Gaming-start script used $IS_LAPTOP (outer var interpolated at
-# write time due to double-quoting). Changed to runtime detection via
-# /sys/class/power_supply so the written script is self-contained.
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 12 — Gaming: Baked into OS"
 
 if [[ $WANT_GAMING -eq 1 ]]; then
   if command -v gamemoded >/dev/null 2>&1 || rpm -q gamemode &>/dev/null; then
-
     if [[ ! -f /etc/gamemode.ini || $FORCE -eq 1 ]]; then
       GAMING_GOV="performance"
       GAMING_GOV_DEFAULT="schedutil"
@@ -1037,15 +978,10 @@ end=/usr/local/bin/immortal-gaming-stop"
       log "gamemode.ini configured (governor: ${GAMING_GOV})"
     fi
 
-    getent group gamemode >/dev/null 2>&1 && \
-      usermod -aG gamemode "$REAL_USER" 2>/dev/null || true
+    getent group gamemode >/dev/null 2>&1 && usermod -aG gamemode "$REAL_USER" 2>/dev/null || true
 
-    # BUG FIX 4: Detect laptop at runtime inside the script (not compile-time).
-    # Original code embedded $IS_LAPTOP via double-quoted write_file, so it was
-    # always 0 or 1 from the parent shell — not from actual runtime state.
     write_file /usr/local/bin/immortal-gaming-start \
 '#!/bin/bash
-# Immortal v9.0 — Gaming start (laptop-safe, runtime detection)
 IS_LAPTOP_RT=0
 ls /sys/class/power_supply/BAT* >/dev/null 2>&1 && IS_LAPTOP_RT=1
 LOG=/tmp/immortal-gaming.log
@@ -1063,7 +999,6 @@ fi'
 
     write_file /usr/local/bin/immortal-gaming-stop \
 '#!/bin/bash
-# Immortal v9.0 — Gaming stop: restore tuned profile
 tuned-adm profile immortal-ultima 2>/dev/null || true
 echo "[$(date +%T)] Gaming session ended — immortal-ultima restored" >> /tmp/immortal-gaming.log'
     [[ $DRY_RUN -eq 0 ]] && chmod +x /usr/local/bin/immortal-gaming-stop || true
@@ -1080,7 +1015,8 @@ RestartSec=5
 Nice=0
 [Install]
 WantedBy=multi-user.target'
-    [[ $DRY_RUN -eq 0 ]] && systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
+
+    [[ $DRY_RUN -eq 0 ]] && { systemctl daemon-reload >>"$LOG_FILE" 2>&1; systemctl start gamemoded-immortal.service; } || true
     enable_service gamemoded-immortal.service "gamemoded system daemon"
 
     write_file /etc/profile.d/immortal-gaming.sh \
@@ -1097,17 +1033,14 @@ export __GL_SYNC_TO_VBLANK=0'
       mkdir -p /usr/local/share/applications
       if [[ $DRY_RUN -eq 0 ]]; then
         cp "$STEAM_DESKTOP_SRC" "$STEAM_DESKTOP_OUT"
-        sed -i 's|^Exec=/usr/bin/steam|Exec=/usr/bin/gamemoderun /usr/bin/steam|g' \
-          "$STEAM_DESKTOP_OUT" 2>/dev/null || true
-        command -v update-desktop-database >/dev/null 2>&1 && \
-          update-desktop-database /usr/local/share/applications >>"$LOG_FILE" 2>&1 || true
+        sed -i 's|^Exec=/usr/bin/steam|Exec=/usr/bin/gamemoderun /usr/bin/steam|g' "$STEAM_DESKTOP_OUT" 2>/dev/null || true
+        command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/local/share/applications >>"$LOG_FILE" 2>&1 || true
         log "Steam desktop override: gamemoderun wraps every Steam game automatically"
       else
-        info "[DRY] Would override $STEAM_DESKTOP_SRC → gamemoderun wrapper"
+        info "[DRY] Would override Steam desktop"
       fi
     else
-      info "Steam desktop file not found — user can add 'gamemoderun %%command%%' manually"
-      info "Or install Steam: sudo dnf install steam"
+      info "Steam desktop file not found — add 'gamemoderun %%command%%' manually if needed"
     fi
 
     log "Gaming fully baked into OS: gamemoded ✓ Mangohud ✓ Steam auto-wrap ✓"
@@ -1119,21 +1052,19 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STAGE 13 — IMMORTAL DAEMONS (Guardian + Sentinel)
+# STAGE 13 — IMMORTAL DAEMONS
 # ═════════════════════════════════════════════════════════════════════════════
 sect "Stage 13 — Immortal Daemons"
 
 GUARDIAN=/usr/local/bin/immortal-guardian
 write_file "$GUARDIAN" \
 "#!/bin/bash
-# Immortal Guardian v9.0 — system patrol
 EXOS_LIST='${EXOS_DRIVES[*]:-}'
 NVME_LIST='${NVME_DRIVES[*]:-}'
 LOG='/var/log/immortal-guardian.log'
 g() { echo \"[\$(date '+%F %T')] \$*\" | tee -a \"\$LOG\"; }
 g 'Guardian patrol v9.0'
 free -h >> \"\$LOG\"
-
 if command -v nvidia-smi >/dev/null 2>&1; then
   GTEMP=\$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
   g \"GPU: \${GTEMP}°C\"
@@ -1142,7 +1073,6 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     tuned-adm profile balanced >>\"\$LOG\" 2>&1 || true
   fi
 fi
-
 if dmesg --since '30 minutes ago' 2>/dev/null | grep -qiE 'nvidia.*error|drm.*error|gpu.*hang|gpu.*reset'; then
   g 'GPU/display error — triggering display wake'
   while IFS= read -r sess; do
@@ -1159,7 +1089,6 @@ if dmesg --since '30 minutes ago' 2>/dev/null | grep -qiE 'nvidia.*error|drm.*er
     fi
   done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print \$1}')
 fi
-
 while IFS= read -r sess; do
   [[ -z \"\$sess\" ]] && continue
   uid=\$(loginctl show-session \"\$sess\" -p User --value 2>/dev/null || echo '')
@@ -1179,7 +1108,6 @@ while IFS= read -r sess; do
     su -c \"DISPLAY='\$xdisp' kstart plasmashell --replace >/dev/null 2>&1 &\" \"\$uname\" 2>/dev/null || true
   fi
 done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print \$1}')
-
 for dev in \$EXOS_LIST \$NVME_LIST; do
   [[ -b \"\$dev\" ]] || continue
   STATUS=\$(smartctl -H \"\$dev\" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | \
@@ -1221,32 +1149,22 @@ enable_service immortal-guardian.timer "Guardian patrol timer"
 SENTINEL=/usr/local/bin/immortal-sentinel
 write_file "$SENTINEL" \
 '#!/bin/bash
-# Immortal Sentinel v9.0 — continuous watchdog + 3AM maintenance
 LOG="/var/log/immortal-sentinel.log"
 REGEN_LOCK="/var/lib/immortal/last-sentinel-regen-date"
 s() { echo "[$(date "+%F %T")] $*" | tee -a "$LOG"; }
 s "Sentinel v9.0 started"
-
 while true; do
   for svc in earlyoom irqbalance tuned smartd; do
     systemctl is-active --quiet "$svc" 2>/dev/null && continue
     s "WARN: $svc inactive — restarting"
-    systemctl restart "$svc" 2>/dev/null && s "$svc restarted OK" || \
-      { s "$svc restart failed — escalating"; \
-        /usr/local/bin/immortal-heal service_restart "$svc" 2>/dev/null || true; }
+    systemctl restart "$svc" 2>/dev/null && s "$svc restarted OK" || { s "$svc restart failed"; /usr/local/bin/immortal-heal service_restart "$svc" 2>/dev/null || true; }
   done
-
   SWAPUSED=$(free 2>/dev/null | awk "/^Swap:/{if(\$2>0) printf \"%.0f\", \$3/\$2*100; else print 0}")
   if [[ "${SWAPUSED:-0}" -gt 80 ]]; then
     s "Swap at ${SWAPUSED}% — swapoff/on cycle"
     swapoff -a 2>/dev/null && swapon -a 2>/dev/null || true
   fi
-
-  journalctl --since "-20min" --no-pager -q 2>/dev/null | grep -q "Out of memory" && \
-    { s "OOM event — logged"; \
-      journalctl --since "-20min" --no-pager -q 2>/dev/null | \
-        grep "Out of memory" | tail -5 >> "$LOG"; }
-
+  journalctl --since "-20min" --no-pager -q 2>/dev/null | grep -q "Out of memory" && { s "OOM event — logged"; journalctl --since "-20min" --no-pager -q 2>/dev/null | grep "Out of memory" | tail -5 >> "$LOG"; }
   HOUR=$(date +%H)
   TODAY=$(date +%Y%m%d)
   LAST=$(cat "$REGEN_LOCK" 2>/dev/null || echo none)
@@ -1258,7 +1176,6 @@ while true; do
     echo "$TODAY" > "$REGEN_LOCK"
     s "3AM maintenance complete"
   fi
-
   sleep 1200
 done'
 [[ $DRY_RUN -eq 0 ]] && chmod +x "$SENTINEL" || true
@@ -1291,7 +1208,6 @@ sect "Stage 14 — Miracle Shoes Timers"
 
 write_file /usr/local/bin/immortal-smart-weekly.sh \
 '#!/bin/bash
-# Immortal PROTECT v9.0 — Weekly SMART long tests
 LOG="/var/log/immortal-guardian.log"
 s() { echo "[$(date "+%F %T")] [SMART] $*" | tee -a "$LOG"; }
 s "Weekly SMART sweep"
@@ -1300,16 +1216,12 @@ for dev in /dev/sd[a-z] /dev/nvme[0-9]*n[0-9]; do
   [[ -b "$dev" ]] || continue
   transport=$(udevadm info --query=property --name="$dev" 2>/dev/null | grep "^ID_BUS=" | cut -d= -f2 || echo "")
   [[ "$transport" == "usb" ]] && continue
-  [[ "$dev" == /dev/nvme* ]] && \
-    { smartctl -t long "$dev" >> "$LOG" 2>&1 || true; } || \
-    { smartctl -d sat -t long "$dev" >> "$LOG" 2>&1 || smartctl -t long "$dev" >> "$LOG" 2>&1 || true; }
-  STATUS=$(smartctl -H "$dev" 2>/dev/null | grep -Ei "SMART overall|Health Status" | \
-           awk -F: "{print \$2}" | xargs || echo unknown)
+  [[ "$dev" == /dev/nvme* ]] && { smartctl -t long "$dev" >> "$LOG" 2>&1 || true; } || { smartctl -d sat -t long "$dev" >> "$LOG" 2>&1 || smartctl -t long "$dev" >> "$LOG" 2>&1 || true; }
+  STATUS=$(smartctl -H "$dev" 2>/dev/null | grep -Ei "SMART overall|Health Status" | awk -F: "{print \$2}" | xargs || echo unknown)
   s "Health $dev: $STATUS"
   echo "$STATUS" | grep -qi FAILED && FAILS=$((FAILS+1))
 done
-[[ $FAILS -gt 0 ]] && { s "WARNING: $FAILS drive(s) failing"; \
-  /usr/local/bin/immortal-heal drive_health_weekly multiple 2>/dev/null || true; }
+[[ $FAILS -gt 0 ]] && { s "WARNING: $FAILS drive(s) failing"; /usr/local/bin/immortal-heal drive_health_weekly multiple 2>/dev/null || true; }
 s "SMART sweep complete (failures: $FAILS)"'
 [[ $DRY_RUN -eq 0 ]] && chmod +x /usr/local/bin/immortal-smart-weekly.sh || true
 
@@ -1334,7 +1246,6 @@ WantedBy=timers.target'
 
 write_file /usr/local/bin/immortal-regen-monthly.sh \
 '#!/bin/bash
-# Immortal REGEN v9.0 — Monthly auto-cleanup
 LOG="/var/log/immortal-guardian.log"
 r() { echo "[$(date "+%F %T")] [REGEN] $*" | tee -a "$LOG"; }
 r "Monthly REGEN started"
@@ -1375,15 +1286,13 @@ WantedBy=timers.target'
 if [[ $HAS_RAID -eq 1 ]]; then
   write_file /usr/local/bin/immortal-raid-scrub.sh \
 '#!/bin/bash
-# Immortal RAID Scrub v9.0 — monthly integrity check
 LOG="/var/log/immortal-guardian.log"
 r() { echo "[$(date "+%F %T")] [RAID] $*" | tee -a "$LOG"; }
 r "RAID scrub started"
 ERRS=0
 while IFS= read -r arr; do
   [[ -z "$arr" ]] && continue
-  echo "check" > "/sys/block/$arr/md/sync_action" 2>/dev/null || \
-    { r "WARN: could not scrub $arr"; ERRS=$((ERRS+1)); continue; }
+  echo "check" > "/sys/block/$arr/md/sync_action" 2>/dev/null || { r "WARN: could not scrub $arr"; ERRS=$((ERRS+1)); continue; }
   for i in $(seq 1 240); do
     [[ "$(cat /sys/block/$arr/md/sync_action 2>/dev/null)" == "idle" ]] && break
     sleep 30
@@ -1392,8 +1301,7 @@ while IFS= read -r arr; do
   r "$arr mismatch_cnt: $MC"
   [[ "$MC" != "0" && "$MC" != "unknown" ]] && ERRS=$((ERRS+1))
 done < <(awk "/^md/{print \$1}" /proc/mdstat 2>/dev/null)
-[[ $ERRS -gt 0 ]] && { r "RAID: $ERRS issue(s)"; \
-  /usr/local/bin/immortal-heal raid_scrub_errors md_arrays 2>/dev/null || true; }
+[[ $ERRS -gt 0 ]] && { r "RAID: $ERRS issue(s)"; /usr/local/bin/immortal-heal raid_scrub_errors md_arrays 2>/dev/null || true; }
 r "RAID scrub complete (issues: $ERRS)"'
   [[ $DRY_RUN -eq 0 ]] && chmod +x /usr/local/bin/immortal-raid-scrub.sh || true
 
@@ -1482,7 +1390,6 @@ sect "Stage 16 — Companion Tools"
 
 write_file /usr/local/bin/immortal-heal \
 '#!/bin/bash
-# Immortal Heal v9.0 — event escalation + optional webhook
 HEAL_LOG="/var/log/immortal-heal.log"
 EVENT="${1:-unknown}"; SUBJECT="${2:-unknown}"
 HOST=$(hostname)
@@ -1490,8 +1397,7 @@ h() { echo "[$(date "+%F %T")] [HEAL] $*" | tee -a "$HEAL_LOG"; }
 alert() {
   h "ALERT: $1"
   local wh="${IMMORTAL_WEBHOOK:-}"
-  [[ -n "$wh" ]] && curl -sf -X POST -H "Content-Type: application/json" \
-    --data "{\"text\":\"[IMMORTAL $HOST] $1\"}" "$wh" >/dev/null 2>&1 || true
+  [[ -n "$wh" ]] && curl -sf -X POST -H "Content-Type: application/json" --data "{\"text\":\"[IMMORTAL $HOST] $1\"}" "$wh" >/dev/null 2>&1 || true
 }
 h "Invoked: event=$EVENT subject=$SUBJECT"
 case "$EVENT" in
@@ -1499,10 +1405,9 @@ case "$EVENT" in
     alert "DRIVE FAILURE: $SUBJECT — IMMEDIATE ATTENTION REQUIRED"
     echo "DRIVE_FAILURE:$SUBJECT:$(date "+%F %T")" >> /var/lib/immortal/failure_flags ;;
   drive_health_weekly) alert "Weekly SMART: failing drives detected" ;;
-  raid_scrub_errors)   alert "RAID scrub: mismatches found — check mdstat" ;;
+  raid_scrub_errors) alert "RAID scrub: mismatches found — check mdstat" ;;
   service_restart)
-    systemctl restart "$SUBJECT" 2>/dev/null && h "$SUBJECT restarted OK" || \
-      { h "$SUBJECT restart failed"; alert "Service $SUBJECT failed to restart"; } ;;
+    systemctl restart "$SUBJECT" 2>/dev/null && h "$SUBJECT restarted OK" || { h "$SUBJECT restart failed"; alert "Service $SUBJECT failed to restart"; } ;;
   *) h "Unknown event: $EVENT"; alert "Unknown event: $EVENT / $SUBJECT" ;;
 esac
 h "Heal complete: event=$EVENT"'
@@ -1537,8 +1442,7 @@ for svc in immortal-smart-weekly.timer immortal-regen-monthly.timer \
 done
 echo ""
 echo -e "${BOLD}── Hardware ─────────────────────────────────────────────${NC}"
-command -v nvidia-smi &>/dev/null && \
-  echo " GPU Temp  : $(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)°C"
+command -v nvidia-smi &>/dev/null && echo " GPU Temp  : $(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)°C"
 echo " Swap      : $(free -h 2>/dev/null | awk "/^Swap:/{print \$3\"/\"\$2}")"
 echo " MANGOHUD  : ${MANGOHUD:-not set}"
 if [[ -s /var/lib/immortal/failure_flags ]]; then
@@ -1579,8 +1483,7 @@ echo "fail2ban    : $(systemctl is-active fail2ban                     2>/dev/nu
 echo ""
 fwupdmgr get-updates --quiet 2>/dev/null | head -5 || echo "fwupdmgr: no updates"
 FIRST_NVME=$(nvme list 2>/dev/null | awk "/^\/dev\/nvme/{print \$1; exit}")
-[[ -n "$FIRST_NVME" ]] && { echo ""; echo "SMART short: $FIRST_NVME"; \
-  smartctl -t short "$FIRST_NVME" 2>/dev/null || echo "SMART unavailable"; }
+[[ -n "$FIRST_NVME" ]] && { echo ""; echo "SMART short: $FIRST_NVME"; smartctl -t short "$FIRST_NVME" 2>/dev/null || echo "SMART unavailable"; }
 echo ""
 echo "Full log: /var/log/immortal-ultima-omega.log"'
 [[ $DRY_RUN -eq 0 ]] && chmod +x /usr/local/bin/immortal-health-check || true
@@ -1614,8 +1517,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
     echo "--- Drive Health ---"
     for dev in /dev/sd[a-z] /dev/nvme[0-9]*n[0-9]; do
       [[ -b "$dev" ]] || continue
-      STATUS=$(smartctl -H "$dev" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | \
-               awk -F: '{print $2}' | xargs || echo unknown)
+      STATUS=$(smartctl -H "$dev" 2>/dev/null | grep -Ei 'SMART overall|Health Status' | awk -F: '{print $2}' | xargs || echo unknown)
       printf " %-12s %s\n" "$dev" "$STATUS"
     done
     echo ""
@@ -1641,12 +1543,10 @@ if [[ $DRY_RUN -eq 0 ]]; then
   CLIP_SUCCESS=0
   if command -v wl-copy >/dev/null 2>&1; then
     WL_DISP="${WAYLAND_DISPLAY:-/run/user/${REAL_UID}/wayland-0}"
-    cat "$PROMPT_FILE" | su -c "WAYLAND_DISPLAY='$WL_DISP' wl-copy" "$REAL_USER" 2>/dev/null \
-      && { log "Copied to clipboard (Wayland)"; CLIP_SUCCESS=1; } || true
+    cat "$PROMPT_FILE" | su -c "WAYLAND_DISPLAY='$WL_DISP' wl-copy" "$REAL_USER" 2>/dev/null && { log "Copied to clipboard (Wayland)"; CLIP_SUCCESS=1; } || true
   fi
   if [[ $CLIP_SUCCESS -eq 0 ]] && command -v xclip >/dev/null 2>&1; then
-    cat "$PROMPT_FILE" | su -c "DISPLAY=${DISPLAY:-:0} xclip -selection clipboard" \
-      "$REAL_USER" 2>/dev/null && { log "Copied to clipboard (X11)"; CLIP_SUCCESS=1; } || true
+    cat "$PROMPT_FILE" | su -c "DISPLAY=${DISPLAY:-:0} xclip -selection clipboard" "$REAL_USER" 2>/dev/null && { log "Copied to clipboard (X11)"; CLIP_SUCCESS=1; } || true
   fi
   [[ $CLIP_SUCCESS -eq 0 ]] && warn "Clipboard unavailable — prompt at: $PROMPT_FILE"
 fi
@@ -1657,9 +1557,7 @@ fi
 sect "Stage 18 — Verification"
 
 chk() {
-  systemctl is-active --quiet "$1" 2>/dev/null && \
-    { verify "$1: active ✓"; return 0; } || \
-    { record_failure "$1 not active"; return 1; }
+  systemctl is-active --quiet "$1" 2>/dev/null && { verify "$1: active ✓"; return 0; } || { record_failure "$1 not active"; return 1; }
 }
 
 chk tuned
@@ -1670,11 +1568,11 @@ chk immortal-guardian.timer
 chk immortal-sentinel.service
 chk immortal-smart-weekly.timer
 chk immortal-regen-monthly.timer
-[[ $HAS_RAID -eq 1 ]]        && chk immortal-raid-scrub.timer
-[[ $HAS_SCX -eq 1 ]]         && chk scx
-[[ $WANT_GAMING -eq 1 ]]     && chk gamemoded-immortal.service
-[[ $WANT_NETDATA -eq 1 ]]    && chk netdata
-[[ $WANT_SECURITY -eq 1 ]]   && chk fail2ban
+[[ $HAS_RAID -eq 1 ]] && chk immortal-raid-scrub.timer
+[[ $HAS_SCX -eq 1 ]] && chk scx
+[[ $WANT_GAMING -eq 1 ]] && chk gamemoded-immortal.service
+[[ $WANT_NETDATA -eq 1 ]] && chk netdata
+[[ $WANT_SECURITY -eq 1 ]] && chk fail2ban
 
 if [[ $DRY_RUN -eq 0 ]]; then
   {
@@ -1704,13 +1602,13 @@ if [[ $VERIFY_FAILURES -eq 0 ]]; then
   echo -e "${GRN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 else
   echo -e "${YLW}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
-  printf  "${YLW}║  IMMORTAL v9.0 COMPLETE — %d verification failure(s) — check log      ║${NC}\n" "$VERIFY_FAILURES"
+  printf "${YLW}║  IMMORTAL v9.0 COMPLETE — %d verification failure(s) — check log      ║${NC}\n" "$VERIFY_FAILURES"
   echo -e "${YLW}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
   for f in "${FAILURE_LOG[@]}"; do err " • $f"; done
 fi
 echo ""
-echo " HASTE ✓  PROTECT ✓  REGEN ✓  OMNISCIENCE ✓"
-echo " Gaming: baked into OS ✓  SELinux: permissive ✓"
+echo " HASTE ✓ PROTECT ✓ REGEN ✓ OMNISCIENCE ✓"
+echo " Gaming: baked into OS ✓ SELinux: permissive ✓"
 echo " Laptop power guard: $([ $IS_LAPTOP -eq 1 ] && echo 'active (schedutil hard cap)' || echo 'n/a (desktop)')"
 echo ""
 echo " Commands:"
